@@ -1,0 +1,459 @@
+/* Overlay styling for popup */
+.auth-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease-in-out;
+    z-index: 1000;
+}
+
+.auth-overlay.open {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.auth-content {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    animation: slide-in 0.3s ease-out forwards, fade-in 0.3s ease-out forwards;
+    position: relative;
+    z-index: 1001;
+}
+
+.auth-content.slide-out {
+    animation: slide-out 0.3s ease-in forwards, fade-out 0.3s ease-in forwards;
+}
+
+@keyframes slide-in {
+    from {
+        transform: translateY(-20%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slide-out {
+    from {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateY(-20%);
+        opacity: 0;
+    }
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fade-out {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+.close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    border: none;
+    background: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #333;
+    z-index: 1002;
+    transition: color 0.3s ease;
+}
+
+.close-button:hover {
+    color: #000;
+}
+
+.auth-form {
+    max-width: 500px;
+    width: 100%;
+    text-align: center;
+    margin:0 auto;
+}
+
+.auth-form h2 {
+    font-size: 1.8rem;
+    margin-bottom: 20px;
+}
+
+.auth-form input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.auth-form button {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    font-size: 1rem;
+    border-radius: 7px;
+    cursor: pointer;
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 2px solid transparent;
+    padding: 20px 10px;
+    transition: background 0.3s ease;
+}
+
+.auth-form-header {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.auth-form-header h2 {
+    font-size: 1.8rem;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 10px 20px;
+    color: #999;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent;
+    transition: color 0.3s ease;
+}
+
+.auth-form-header h2.active-tab {
+    color: #3B4A63;
+    position: relative;
+    font-weight: bold;
+    border-bottom: 2px solid #333;
+}
+
+.auth-form-header h2.active-tab::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 4px;
+}
+
+.auth-tab {
+    font-size: 1.8rem;
+    font-weight: bold;
+    cursor: pointer;
+    color: #555;
+    border-bottom: 2px solid transparent;
+    transition: color 0.3s ease, border-bottom 0.3s ease;
+}
+
+.auth-tab:hover {
+    color: #666;
+}
+
+.auth-left {
+    flex: 1;
+    background: linear-gradient(135deg, #e0eafc, #cfdef3, #f3f8ff, #e9f5e1, #f9e7fc);
+    background-size: 300% 300%;
+    animation: wave-gradient 8s ease infinite, mask-wave 8s linear infinite;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    text-align: center;
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+@keyframes wave-gradient {
+    0% {
+        background-position: 0% 50%; /* Starting point of the gradient */
+    }
+    50% {
+        background-position: 100% 50%; /* Midpoint for the wave effect */
+    }
+    100% {
+        background-position: 0% 50%; /* End point to loop back */
+    }
+}
+
+@keyframes mask-wave {
+    0% {
+        mask-position: 0% 50%;
+    }
+    50% {
+        mask-position: 100% 50%;
+    }
+    100% {
+        mask-position: 0% 50%;
+    }
+}
+
+.auth-left img {
+    max-width: 80%;
+    margin-bottom: 20px;
+}
+
+.auth-left h1 {
+    font-size: 2.5rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: white;
+    background: linear-gradient(135deg, #333, #000, #e0eafc, #f9e7fc, #cfdef3);
+    background-size: 300% 300%;
+    background-clip: border-box;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: title-gradient 8s ease infinite, wave-gradient 8s ease infinite;
+    position: relative;
+    z-index: 2;
+    line-height: 1.2;
+}
+
+@keyframes title-gradient {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+.auth-left h1::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: inherit;
+    z-index: 1;
+    mix-blend-mode: color-burn; /* Enhances the contrast when colors overlap */
+}
+
+.auth-left::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.2);
+    z-index: 1;
+}
+
+.auth-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+    background: #fff;
+}
+
+.auth-button.google {
+    background: white;
+    color: #333;
+    font-weight: bold;
+    margin-top: 20px;
+    gap: 10px;
+    border: 1.5px solid #3B4A637A;
+    transition: background 0.3s ease;
+}
+
+.auth-button.facebook {
+    background: white;
+    color: #333;
+    gap: 10px;
+    font-weight: bold;
+    border: 1.5px solid #3B4A637A;
+    transition: background 0.3s ease;
+}
+
+.auth-button.apple {
+    background: #333;
+    color: white;
+    gap: 10px;
+    font-weight: bold;
+    transition: background 0.3s ease;
+}
+
+.auth-button.google:hover,
+.auth-button.facebook:hover {
+    background-color: #d5d5d5;
+    opacity: 0.9;
+}
+
+.auth-button.apple:hover {
+    background-color: #444;
+    opacity: 0.9;
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    margin: 20px 0;
+    color: #999;
+    font-size: 0.9rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #ccc;
+    margin: 0 10px;
+}
+
+.auth-submit {
+    background: #3B4A63;
+    color: white;
+    padding: 12px;
+    margin-top: 20px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.3s ease;
+}
+
+.auth-switch {
+    background: #f9e7fc;
+    color: black;
+    font-weight: bold;
+    transition: background 0.3s ease;
+}
+
+.auth-switch:hover {
+    background: #d8e4fa;
+}
+
+.auth-submit:hover {
+    background: #2a364d;
+}
+
+.auth-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+    margin: 15px 0;
+    font-weight: bold;
+}
+
+.auth-checkbox #terms {
+    display: inline-block;
+    transform: scale(1.75);
+    width: 10px;
+    height: 10px;
+    margin-right: 5px;
+
+}
+
+.auth-form input {
+    width: 100%;
+    padding: 12px;
+    margin: 7px 0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+
+.auth-form-header {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.auth-footer {
+    margin-top: 20px;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.auth-footer a {
+    color: #3B4A63;
+    text-decoration: none;
+    font-weight: bold;
+    transition: color 0.3s ease;
+}
+
+.auth-footer a:hover {
+    color: #2a364d;
+}
+
+.auth-birthday {
+    margin: 20px 0;
+    text-align: left;
+}
+
+.auth-birthday h3 {
+    font-size: 0.9rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #555;
+}
+
+.auth-birthday-label {
+    display: inline-flex;
+    gap: 30px;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.auth-label {
+    margin-bottom: 30px;
+    text-align: left;
+}
+
+.auth-label h3 {
+    font-size: 0.9rem;
+    font-weight: bold;
+    margin-bottom: 0px;
+    color: #555;
+}
+
+.forgot-password {
+    font-weight: bold;
+}
