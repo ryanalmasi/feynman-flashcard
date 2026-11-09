@@ -194,14 +194,15 @@ If you see a `[handoff-hook]` note in your context, follow it as described here.
 ### Decision process (owner's rule)
 **Every design decision must be explained before implementation, and the owner has the final say.** For each choice (stack, provider, schema, auth, hosting), present the options, the trade-offs, and a recommendation with reasoning. Then wait for approval before writing code that depends on it. Don't make silent architectural choices.
 
-### Direction agreed so far (not yet implemented)
-- **Stack:** a full stack change is allowed. Pick whatever fits the design best (streaming chat, voice, document ingestion), but justify it first.
-- **Database:** leaning towards **PostgreSQL**. The goal is the most secure, minimal setup: a least-privilege app role, no superuser in the app, TLS, secrets in env vars rather than code, and only the extensions that are actually needed (e.g. evaluate `pgvector` only if embeddings are stored). Whether Redis is still needed is an open question.
+### Direction agreed so far
+Infrastructure decisions are now recorded as ADRs in `docs/adr/` (stack, database, auth, config, LLM layer, jobs, tooling, git); those supersede the earlier leanings below. Scoring and product direction remain proposals in `docs/planning-handoff.md`.
+- **Stack:** decided in ADRs 0001-0003: FastAPI (Python 3.13) + Vite React TS, layout `api/ web/ infra/ docs/`.
+- **Database:** decided in ADR 0004: PostgreSQL 18 with least-privilege migrator/app roles, secrets in env vars. Redis is not used (sessions will live in Postgres, ADR 0005). Add `pgvector` only if embeddings are stored.
 - **Scoring is multi-stage:**
   1. **Baseline score:** a cheap, deterministic, objective measure of how closely the explanation matches the source material (e.g. embedding similarity or key-concept coverage).
   2. **AI-graded score(s):** an LLM judges the explanation against the source on things like accuracy, completeness, clarity, and misconceptions.
   3. **Final result:** combine both, so the AI's subjective judgement is anchored to the objective baseline. Then generate actionable feedback from the conversation.
-  - The full proposal is in `docs/planning-handoff.md` §2: a Knowledge Map, claim extraction, a baseline, an evidence-quoted rubric judge, asymmetric-band reconciliation, and calibration. It is a proposal awaiting owner approval.
+  - The full proposal is in `docs/planning-handoff.md` §2: a Knowledge Map, claim extraction, a baseline, an evidence-quoted rubric judge, asymmetric-band reconciliation, and calibration. It is a proposal awaiting owner approval (scoring parameters are Phase 2 decisions).
 - **"Illumina"** was just the name of the old MySQL database. It is not a product, dependency, or external system and can be dropped.
 
 ### Research status
