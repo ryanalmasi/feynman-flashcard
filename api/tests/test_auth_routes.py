@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import unicodedata
@@ -80,6 +81,20 @@ async def test_register_duplicate_email_409(api_client: httpx.AsyncClient) -> No
     r = await register(api_client, email="A@Example.com")
     assert r.status_code == 409
     assert r.json()["error"]["code"] == "email_taken"
+
+
+@pytest.mark.parametrize("path", ["/auth/register", "/auth/login"])
+async def test_lone_surrogate_password_422(api_client: httpx.AsyncClient, path: str) -> None:
+    body: dict[str, Any] = {"email": "a@example.com", "password": "\ud800aaaaaaaaaaaa"}
+    if path == "/auth/register":
+        body |= {"birth_month": 1, "birth_year": 2000}
+    raw = json.dumps(body).encode()  # ensure_ascii -> "\\ud800" escape
+    assert b"\\ud800" in raw
+    r = await api_client.post(
+        path, content=raw, headers={**ORIGIN, "Content-Type": "application/json"}
+    )
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "validation_error"
 
 
 @pytest.mark.parametrize("pw", ["x" * 11, "x" * 129])

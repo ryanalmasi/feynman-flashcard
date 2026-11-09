@@ -122,7 +122,9 @@ async def delete_study_set(
     key = (
         await db.execute(select(Document.storage_key).where(Document.study_set_id == study_set.id))
     ).scalar_one_or_none()
-    await db.execute(delete(StudySet).where(StudySet.id == study_set.id))
+    await db.execute(
+        delete(StudySet).where(StudySet.id == study_set.id, StudySet.user_id == current.user.id)
+    )
     await db.commit()
     if key is not None:
         try:
