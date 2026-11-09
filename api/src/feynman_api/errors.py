@@ -12,6 +12,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
+NOT_FOUND_MESSAGE = "Not found."
 _CODES = {404: "not_found", 405: "method_not_allowed"}
 
 
@@ -54,6 +55,59 @@ class AppError(Exception):
         self.headers = dict(headers) if headers else None
 
 
+def not_authenticated() -> AppError:
+    return AppError(401, "not_authenticated", "Not signed in.")
+
+
+def invalid_credentials() -> AppError:
+    return AppError(401, "invalid_credentials", "Invalid email or password.")
+
+
+def csrf_failed() -> AppError:
+    return AppError(403, "csrf_failed", "Request blocked. Refresh the page and try again.")
+
+
+def registration_not_allowed() -> AppError:
+    return AppError(
+        403,
+        "registration_not_allowed",
+        "We couldn't create an account with the details provided.",
+    )
+
+
+def email_taken() -> AppError:
+    return AppError(409, "email_taken", "An account with this email already exists.")
+
+
+def password_breached() -> AppError:
+    return AppError(
+        422,
+        "password_breached",
+        "This password has appeared in a data breach. Choose a different one.",
+    )
+
+
+def rate_limited(retry_after: int) -> AppError:
+    return AppError(
+        429,
+        "rate_limited",
+        "Too many attempts. Try again later.",
+        headers={"Retry-After": str(max(1, retry_after))},
+    )
+
+
+def not_found() -> AppError:
+    return AppError(404, "not_found", NOT_FOUND_MESSAGE)
+
+
+def file_too_large() -> AppError:
+    return AppError(413, "file_too_large", "This file is larger than 20 MB.")
+
+
+def unsupported_file_type() -> AppError:
+    return AppError(415, "unsupported_file_type", "Only PDF files can be uploaded.")
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
@@ -63,6 +117,8 @@ def register_error_handlers(app: FastAPI) -> None:
     async def http_exception_handler(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         code = _CODES.get(exc.status_code, "http_error")
         message = exc.detail if isinstance(exc.detail, str) else code
+        if exc.status_code == 404 and message == "Not Found":  # Starlette's routing default
+            message = NOT_FOUND_MESSAGE
         return _response(exc.status_code, code, message, headers=dict(exc.headers or {}))
 
     @app.exception_handler(RequestValidationError)

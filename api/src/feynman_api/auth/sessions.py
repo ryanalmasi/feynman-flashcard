@@ -4,12 +4,15 @@ import uuid
 from datetime import datetime, timedelta
 
 from fastapi import Response
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from feynman_api.config import Settings
 from feynman_api.models import AuthSession
 
+# Transactions: resolve_session COMMITS the caller's session after a touch or lazy delete, so
+# call it before making pending writes. create_session and delete_session do NOT commit
+# (the route commits).
 SESSION_COOKIE = "feynman_session"
 IDLE = timedelta(days=7)
 ABSOLUTE = timedelta(days=30)
@@ -25,7 +28,10 @@ async def create_session(
 ) -> tuple[str, AuthSession]:
     """Create a session; the plain token is returned once and never stored."""
     await db.execute(
-        delete(AuthSession).where(AuthSession.user_id == user_id, AuthSession.expires_at <= now)
+        delete(AuthSession).where(
+            AuthSession.user_id == user_id,
+            or_(AuthSession.expires_at <= now, AuthSession.last_seen_at <= now - IDLE),
+        )
     )
     token = secrets.token_urlsafe(32)
     session = AuthSession(

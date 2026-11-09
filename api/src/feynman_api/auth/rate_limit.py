@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from feynman_api.models import RateLimitBucket
 
+# Transactions: hit, clear and prune COMMIT the caller's session (so counts survive a failing
+# request), which also commits any pending work in it. Call them before making pending writes.
+# peek only reads.
 _RETENTION = timedelta(days=1)
 
 

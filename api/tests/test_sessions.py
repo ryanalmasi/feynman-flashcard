@@ -124,6 +124,18 @@ async def test_create_session_prunes_users_expired_sessions(db_session: AsyncSes
     assert new_a.id in ids
 
 
+async def test_create_session_prunes_idle_sessions(db_session: AsyncSession) -> None:
+    user = await _user(db_session)
+    _, idle = await create_session(db_session, user.id, T0)
+    mid = T0 + IDLE - timedelta(seconds=1)
+    _, live = await create_session(db_session, user.id, mid)
+    later = T0 + IDLE
+    _, new = await create_session(db_session, user.id, later)
+    ids = set((await db_session.execute(select(AuthSession.id))).scalars())
+    assert idle.id not in ids
+    assert {live.id, new.id} <= ids
+
+
 async def test_delete_session(db_session: AsyncSession) -> None:
     user = await _user(db_session)
     token, s = await create_session(db_session, user.id, T0)
