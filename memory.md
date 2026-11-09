@@ -118,7 +118,7 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 ## 3. Repository state
 
 - **Path:** `~/code/feynman-flashcard`. **Branch:** `phase-1-foundation`, pushed to `origin`. `main` is unchanged at `e7bd5b9`.
-- **Draft PR:** (opened by the controller after the final review; see the PR list)
+- **Draft PR:** https://github.com/ryanalmasi/feynman-flashcard/pull/1 (draft; not merged; owner merges after orchestrator review)
 - **Working tree:** clean after the Task 9 commit. `.superpowers/` (agent scratch) is gitignored. `.env` files exist locally only and are gitignored.
 - **Machine:** all prerequisites in `docs/setup-prerequisites.md` are installed and verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
 
