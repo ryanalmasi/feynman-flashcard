@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: env db db-down db-reset db-psql
+.PHONY: env db db-down db-reset db-psql migrate
 
 env:
 	./scripts/dev-env.sh
@@ -22,3 +22,6 @@ db-reset:
 
 db-psql:
 	$(COMPOSE) exec db psql -U feynman_migrator -d feynman
+
+migrate:
+	cd api && uv run alembic upgrade head
