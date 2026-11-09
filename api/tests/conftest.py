@@ -2,6 +2,7 @@ import os
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
+import asyncpg  # type: ignore[import-untyped]
 import httpx
 import pytest
 from alembic.config import Config
@@ -66,12 +67,23 @@ def migration_url() -> str:
 @pytest.fixture(scope="session")
 def migrated_db(migration_url: str, alembic_cfg: Config) -> Iterator[None]:
     """Run `alembic upgrade head` on feynman_test as the migrator role."""
+    previous = os.environ.get("MIGRATION_DATABASE_URL")
     os.environ["MIGRATION_DATABASE_URL"] = migration_url
     try:
-        command.upgrade(alembic_cfg, "head")
-    except OSError as exc:
-        pytest.fail(f"{DB_HINT} ({type(exc).__name__})")
-    yield
+        try:
+            command.upgrade(alembic_cfg, "head")
+        except Exception as exc:
+            # Never include str(exc) or the URL: they may carry credentials.
+            hint = DB_HINT
+            if isinstance(exc, asyncpg.InvalidPasswordError):
+                hint += " Credentials rejected: run `make db-reset` (DELETES local DB data)."
+            pytest.fail(f"{hint} ({type(exc).__name__})", pytrace=False)
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("MIGRATION_DATABASE_URL", None)
+        else:
+            os.environ["MIGRATION_DATABASE_URL"] = previous
 
 
 @pytest.fixture
