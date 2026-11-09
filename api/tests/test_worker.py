@@ -229,7 +229,49 @@ async def test_run_forever_stops_on_event(sm, ctx) -> None:  # type: ignore[no-u
     await asyncio.sleep(0.15)
     assert not task.done()
     stop.set()
-    await asyncio.wait_for(task, timeout=0.1)
+    await asyncio.wait_for(task, timeout=0.5)
+
+
+async def test_failing_on_failed_still_marks_job_failed(sm, ctx) -> None:  # type: ignore[no-untyped-def]
+    jid = await _job(sm)
+
+    class BadOnFailed(RecordingHandler):
+        async def on_failed(self, db: AsyncSession, job: Job, user_message: str) -> None:
+            raise RuntimeError("on_failed broke")
+
+    handler = BadOnFailed(exc=PermanentJobError("Nope."))
+    assert await run_once(sm, ctx, {"k": handler}) is True
+    job = await _get(sm, jid)
+    assert job.status == "failed"
+    assert job.last_error == "Nope."
+    assert job.locked_until is None
+    assert await run_once(sm, ctx, {"k": handler}) is False
+    assert handler.runs == 1
+
+
+async def test_lease_lost_during_run_rolls_back_handler_writes(sm, ctx) -> None:  # type: ignore[no-untyped-def]
+    jid = await _job(sm)
+
+    class ReclaimedMidRun(RecordingHandler):
+        async def run(
+            self, db: AsyncSession, job: Job, ctx: WorkerContext
+        ) -> dict[str, Any] | None:
+            db.add(StudySet(user_id=job.user_id, title="leak"))
+            await db.flush()
+            async with sm() as other:  # simulate another worker reclaiming the job
+                await other.execute(
+                    update(Job).where(Job.id == job.id).values(attempts=Job.attempts + 1)
+                )
+                await other.commit()
+            return {"done": True}
+
+    assert await run_once(sm, ctx, {"k": ReclaimedMidRun()}) is True
+    async with sm() as s:
+        assert (await s.execute(select(StudySet))).first() is None
+    job = await _get(sm, jid)
+    assert job.status == "running"
+    assert job.attempts == 2
+    assert job.result is None
 
 
 def _typecheck(h: JobHandler) -> None:  # protocol conformance

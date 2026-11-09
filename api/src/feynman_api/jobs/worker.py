@@ -29,14 +29,30 @@ async def _fail(
     handler: JobHandler | None,
     user_message: str,
 ) -> None:
+    if handler is not None:
+        try:
+            async with sessionmaker() as db:
+                if not await mark_failed(db, job, error):
+                    logger.warning("job %s: lease lost before failure could be recorded", job.id)
+                    await db.rollback()
+                    return
+                await handler.on_failed(db, job, user_message)
+                await db.commit()
+                return
+        except Exception as exc:
+            # Never loop forever on a broken on_failed: record the failure alone below.
+            logger.error(
+                "job %s: on_failed raised %s; marking failed without it",
+                job.id,
+                type(exc).__name__,
+                exc_info=True,
+            )
     async with sessionmaker() as db:
-        if not await mark_failed(db, job, error):
+        if await mark_failed(db, job, error):
+            await db.commit()
+        else:
             logger.warning("job %s: lease lost before failure could be recorded", job.id)
             await db.rollback()
-            return
-        if handler is not None:
-            await handler.on_failed(db, job, user_message)
-        await db.commit()
 
 
 async def run_once(
