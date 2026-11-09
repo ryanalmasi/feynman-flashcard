@@ -448,7 +448,7 @@ Present each with options, trade-offs and a recommendation before implementation
 **Phase tags:** P1 = must be decided in Phase 1 (architecture). P2 = needed for the MVP. P3 = can wait.
 
 - **P1: all decided 2026-11-08/09**, see ADRs 0001–0011 and §1. (#4: local embeddings, model TBD in P2. #5: auth decided; Postgres host deferred to deployment.)
-- **P2 (2a built, pending merge):** #8 MVP scope **decided** (ADR 0012); #7 age policy **decided** (ADR 0013), provider data retention still open (with #2). **Still open:** #2 LLM provider (one for the MVP; needed for Phase 2b), #6 scoring parameters (MVP subset; needed for 2c), embedding model (2c)
+- **P2 (2a built, reviewed and CI green on PR #2, awaiting the owner's merge):** #8 MVP scope **decided** (ADR 0012); #7 age policy **decided** (ADR 0013), provider data retention still open (with #2). **Still open:** #2 LLM provider (one for the MVP; needed for Phase 2b), #6 scoring parameters (MVP subset; needed for 2c), embedding model (2c)
 - **P3:** #3 voice, #10 pricing and billing
 
 1. **Stack:** FastAPI + Vite/React (TS) vs. full-stack TypeScript.

@@ -4,8 +4,8 @@
 > **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
-**Last updated:** 2026-11-09 (Phase 2a implemented on `phase-2a-foundations`, final review fixes in `32b5327`; draft PR pending orchestrator review and the owner's merge)
-**Latest handoff written:** #3 (`handoff-prompts/orchestrator-handoff-3.md`), plus the implementer kickoffs `handoff-prompts/implementer-phase-1.md` and `implementer-phase-1-fixups.md`
+**Last updated:** 2026-11-09 (Phase 2a built, reviewed, fixed up and CI green on draft PR #2; **awaiting the owner's merge**. Next: the 2b decision round)
+**Latest handoff written:** #4 (`handoff-prompts/orchestrator-handoff-4.md`), plus implementer kickoffs `implementer-phase-1.md`, `implementer-phase-1-fixups.md`, `implementer-phase-2a.md`, `implementer-phase-2a-fixups.md` (and `implementer-phase-2a-resume-1.md`)
 
 ---
 
@@ -13,7 +13,7 @@
 
 - **What it is:** a study tool built around the Feynman technique: the student teaches a topic to an AI, gets a multi-stage score and feedback, and reviews AI-generated flashcards built from their PDF or topic.
 - **What exists in code today:** the Phase 1 foundation, merged to `main` (`3185eb1`): FastAPI app with `GET /health`, Postgres 18 in Docker with migrator/app roles, migration `0001_users` (`users`, `auth_identities`), LLM/embedder interfaces with fakes and contract tests, a Vite React TS status page with a generated typed API client, `make` targets, pre-commit + gitleaks, and a GitHub Actions workflow (green). `CLAUDE.md` and `README.md` describe the current structure (including the Phase 2a additions on the 2a branch); the Jan-2025 prototype is in git history at `5aba556`.
-- **Current phase:** **Phase 1 merged (2026-11-09). Phase 2a is implemented on `phase-2a-foundations` (accounts, sets/cards, review, PDF upload + job queue + extraction), on a draft PR pending review and the owner's merge. Phase 2 (MVP) is split into 2a/2b/2c (ADR 0012); 2b needs a decision round first.** Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
+- **Current phase:** **Phase 1 merged (2026-11-09). Phase 2a is implemented on `phase-2a-foundations` (accounts, sets/cards, review, PDF upload + job queue + extraction), on draft PR #2: reviewed (no blocking findings), fixed up, CI green, **awaiting the owner's merge**. Phase 2 (MVP) is split into 2a/2b/2c (ADR 0012); 2b needs a decision round first.** Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
 - **Repo location (changed in session 2):** `~/code/feynman-flashcard` (WSL Linux filesystem). The old copy at `/mnt/c/Users/ryana/Documents/Github/feynman-flashcard` is **stale** and should be renamed or deleted. Don't work there.
 
 ## 2. Session log
@@ -229,20 +229,74 @@ Model: Sonnet 5.5, working directly (no subagents), after the orchestrator revie
 - **Tests (TDD; the lockout and per-user tests failed first because the correct password still returned 204):** `test_delete_account_lockout_blocks_correct_password`, `test_delete_account_limit_is_per_user`, `test_delete_account_success_after_failures_under_limit`, and a web test "429 shows the rate-limit message and keeps the user signed in" (passed with no page change).
 - **Counts:** 238 pytest (was 235) and 99 vitest (was 98); `make check` and `gitleaks git --redact -v .` clean locally.
 - **Deviations:** none from the fix-up prompt.
-- **CI at `5d0e027`:** the `api` and `web` jobs passed. The `secrets` job failed three times (run 42579982884, attempts 1-3) at "Install gitleaks" with `curl: (22) ... error: 504` from GitHub's release download, before gitleaks ran; the URL returned 200 from the dev machine. It is a download failure, not a leak or a billing lock. The CI result for the final commit is in the PR body.
+- **CI at `5d0e027`:** the `api` and `web` jobs passed. The `secrets` job failed three times (run 42579982884, attempts 1-3) at "Install gitleaks" with `curl: (22) ... error: 504` from GitHub's release download, before gitleaks ran; the URL returned 200 from the dev machine. It is a download failure, not a leak or a billing lock. The CI result for the final commit is in the PR body. **Superseded:** the orchestrator fixed the download in `cd2883b` (authenticated `gh release download`), and CI went green (run 42581239361; see Session 4).
+
+### Session 4 (2026-11-09): Phase 2a plan, implementation review, fix-up, CI fix
+Model: Opus 5.5 (orchestrator). Application code was written only by implementers, except the one CI change below (owner-requested).
+
+**Completed**
+1. Wrote **`docs/implementation-plan-phase-2a.md`** (Tasks 0-15, 8 Review Focus items each pinned to a named test). A builder-check subagent (plan only) found 3 would-fail issues: the 413 cap mechanism (FastAPI wraps non-HTTP exceptions during `request.form()` as 400), uncommitted rate-limit/session writes, and a register-page regex matching "2013". It also found 11 smaller gaps. All were fixed in the plan. Fixed two stale lines in the 2a design header (status "Approved", plan path).
+2. Wrote `handoff-prompts/implementer-phase-2a.md`. The owner approved the plan, the prompt and the six *(orch.)* calls:
+   - logging via `basicConfig` + root `setLevel` instead of `force=True` (`force` strips pytest's caplog handler)
+   - indigo accent (from the mockup)
+   - the fixed error-message table (plan Task 5)
+   - 20 MB = 20 MiB
+   - `DocumentSummary` gains `id` and `error_message`
+   - `make env` appends `SESSION_COOKIE_SECURE=false` to an existing `api/.env`
+3. **Reviewed draft PR #2** task by task:
+   - re-ran `make check` (235 pytest / 98 vitest)
+   - read the auth, upload, worker and ownership code
+   - **mutation-checked 4 Review Focus pins**: removing the owner filter, an always-true CSRF check, the size cap disabled, and `SKIP LOCKED` removed. Each made its pinning test fail.
+   Verdict: conformant, nothing blocking. Findings:
+   - (M) the owner's browser check was not fully closed
+   - (M) the owner's `api/.env` predated `SESSION_COOKIE_SECURE=false`
+   - (M) `DELETE /auth/account` had no attempt limit (a plan gap)
+   - (L) a broken `on_failed` leaves the document `processing`
+   - (L) unauthenticated multipart spooling before auth (bounded by the cap)
+   - (L) a 5xx on `/auth/session` signs the user out
+   - (L) the review flip control has no accessible name or Enter key
+   - (process) Task 6 code was written before its tests (later mutation-hardened)
+4. The owner chose a fix-up round for the attempt limit only. Wrote `handoff-prompts/implementer-phase-2a-fixups.md`; the implementer delivered R3 (`5d0e027`, entry above). Re-review: correct. `make check` passes with 238 pytest / 99 vitest; gitleaks is clean over 65 commits.
+5. **CI secrets job failed** (runs 42579982884 and 42580331206, 3 attempts each) at "Install gitleaks": `curl: (22) … 504`. The cause was a GitHub incident ("Increased timeouts due to surge in anonymous users"). With the owner's go-ahead, the orchestrator committed **`cd2883b` `ci: download gitleaks with an authenticated, retried request`**. It uses `gh release download` with `GH_TOKEN: ${{ github.token }}`, 3 attempts, and the sha256 check unchanged (verified locally: OK on the real file, exit 1 on a tampered copy). **CI green: run 42581239361** (https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42581239361), api, web and secrets.
+6. **Owner's browser checks, closed:**
+   - The owner ran `make env`; `api/.env` now has `SESSION_COOKIE_SECURE=false`.
+   - The orchestrator confirmed from WSL that `POST /auth/register` sets `feynman_session` with `HttpOnly; Max-Age=2592000; Path=/; SameSite=lax` and no `Secure`. The owner confirmed in Chrome that the cookie is present.
+   - The earlier "password was found online" report is judged to be Chrome's password-manager breach warning, not the app. Login never calls the breach check, and the app's copy is different. It was not otherwise reproduced.
+   - The check left one throwaway `cookie-check-…@example.com` user in the local dev DB (harmless; `make db-reset` clears it).
+
+**Owner decisions:** approved the 2a plan and all *(orch.)* calls; chose fix-up option (a) for the attempt limit only (not the L items); asked for the CI change. **New standing rule:** every phase and fix-up round runs in a brand-new implementer session, so each kickoff prompt needs a named "Read these first" list and a preflight, and each plan needs a "Context for a fresh implementer" section naming the existing code to reuse (recorded in `CLAUDE.md` "Implementer sessions start cold" and in handoff #4 steps 4–5).
+
+**Still open:** PR #2 merge (owner). The 2b decisions:
+- LLM provider + models, with prices re-verified
+- provider data-retention/training settings (students may be minors)
+- Knowledge Map details
+- card count and style
+The 2c decisions as listed in the Session 3 entry. Optional later items: the L findings above and the deferred minors in the Phase 2a entry.
 
 ## 3. Repository state
 
-- **Path:** `~/code/feynman-flashcard`. **Branch:** `phase-2a-foundations` (from `main` at `3185eb1`, the Phase 1 squash merge). `main` itself has no 2a code until the owner merges.
-- **PR #1** (Phase 1): merged, CI green (runs 42547339617 and, on `main`, 42548513765). **Phase 2a draft PR:** draft PR #2 https://github.com/ryanalmasi/feynman-flashcard/pull/2. CI for the 2a branch: green, run https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42573176896.
-- **Working tree after this commit:** clean (docs only). `.env` files exist locally and are gitignored; `.superpowers/` is gitignored scratch.
-- **Machine:** all prerequisites in `docs/setup-prerequisites.md` are installed and verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
+- **Path:** `~/code/feynman-flashcard`. **Branch checked out:** `phase-2a-foundations` at `cd2883b`, pushed and in sync with `origin`. `main` is still at `3185eb1` (Phase 1); it has no 2a code until the owner merges PR #2.
+- **PR #1** (Phase 1): merged. **PR #2** (Phase 2a): https://github.com/ryanalmasi/feynman-flashcard/pull/2. It is **draft, open, CI green** (run 42581239361 at `cd2883b`) and reviewed with no blocking findings. **The owner merges** (and marks it ready first).
+  - The PR body's CI section still describes the failed secrets runs; the orchestrator offered to update it.
+- **Uncommitted (orchestrator session 4 handoff):** `memory.md`, `CLAUDE.md`, `docs/planning-handoff.md` (small status updates), and the new `handoff-prompts/orchestrator-handoff-4.md`.
+  - Recommended: commit them onto `phase-2a-foundations` before the merge, so they land in `main` with 2a.
+  - Otherwise commit them on `main` (or the 2b branch) after the merge.
+  - Only when the owner asks.
+- `.env` files exist locally only and are gitignored. The local dev DB has test users from the browser checks.
+- **Machine:** prerequisites verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
 
 ## 4. Open questions and next steps
 
-1. **The orchestrator reviews the 2a draft PR** (Review Focus items, the owner decisions listed in the 2a entry, deviations). **The owner merges** (only the owner merges).
-2. **Then the 2b decision round** (own branch, draft PR, owner merge): LLM provider and models with prices re-verified, provider data-retention/training settings, Knowledge Map details, card count/style. Then 2c: embedding model, scoring parameters, tutor prompt and session limits, feedback format, usage-data retention. Launch-time: EU 13-15 users, ToS/privacy wording.
-3. Owner choices on the deferred items above (notably the unauthenticated multipart spooling and the missing `DELETE /auth/account` attempt limit), and whether the undiagnosed login report needs follow-up.
+1. **Owner:** commit the session-4 handoff docs (see §3), mark PR #2 ready, and merge it (squash, as with PR #1). Then `git switch main && git pull`.
+2. **Next orchestrator session (#5, `handoff-prompts/orchestrator-handoff-4.md`):** run the **2b decision round** (ADR 0012: M4 Knowledge Map, M5 generated flashcards). Order:
+   1. LLM provider and models: re-verify prices and the data-retention/training settings; students may be minors.
+   2. Knowledge Map details (schema, editing, versions).
+   3. Card count and style.
+   4. Then the 2b design, builder check, plan (`docs/implementation-plan-phase-2b.md`) and implementer prompt, the same way as 2a.
+3. Optional backlog (only if the owner wants it, e.g. folded into 2b's first task):
+   - the session-4 L findings
+   - the deferred minors in the Phase 2a entry
+   - owner decision items 1 and 3 there (unauthenticated multipart spooling; no cap on extracted text size or time)
 
 **Caveats**
 - Library versions are not pinned in the plan by design; the lockfiles (`api/uv.lock`, `web/package-lock.json`) record what was installed.

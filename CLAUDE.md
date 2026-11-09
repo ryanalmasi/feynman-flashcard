@@ -2,7 +2,7 @@
 
 Guidance for Claude Code sessions in this repository. It describes what the repo **currently is**, not what it is meant to become. The product vision is covered separately below so the two don't get mixed up.
 
-> **Status (2026-11-09):** **Phase 1 (architecture foundation) is merged to `main` (PR #1, CI green). Phase 2a is built on branch `phase-2a-foundations` and is on a draft PR, pending orchestrator review and the owner's merge** (CI for the 2a branch is recorded in `memory.md`/the PR). 2a has accounts (register with a 13+ age screen, login/logout, account deletion), study sets and flashcards, a review screen, PDF upload, a Postgres job queue with a worker, and PDF text extraction, with a Tailwind + shadcn web UI. There is **no LLM use yet**: no Knowledge Map, generated cards, tutor, scoring or feedback (2b/2c). Phase 2 is split into 2a/2b/2c (ADR 0012); 2a's decisions are ADRs 0012-0018 and its design is `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`. After the merge, the next step is the 2b decision round. Read `memory.md` next.
+> **Status (2026-11-09):** **Phase 1 (architecture foundation) is merged to `main` (PR #1, CI green). Phase 2a is built on branch `phase-2a-foundations` and is on draft PR #2: reviewed by the orchestrator (no blocking findings), fixed up, CI green; awaiting the owner's merge.** 2a has accounts (register with a 13+ age screen, login/logout, account deletion), study sets and flashcards, a review screen, PDF upload, a Postgres job queue with a worker, and PDF text extraction, with a Tailwind + shadcn web UI. There is **no LLM use yet**: no Knowledge Map, generated cards, tutor, scoring or feedback (2b/2c). Phase 2 is split into 2a/2b/2c (ADR 0012); 2a's decisions are ADRs 0012-0018 and its design is `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`. After the merge, the next step is the 2b decision round. Read `memory.md` next.
 >
 > The Jan-2025 prototype is in git history at `5aba556`.
 
@@ -52,7 +52,7 @@ feynman-flashcard/
 │   ├── implementation-plan-phase-2a.md   Phase 2a plan (Tasks 0-15)
 │   ├── planning-handoff.md       Roadmap (§0), decisions (§1), scoring design (§2), research, costs, open decisions (§5)
 │   └── setup-prerequisites.md    Machine setup (WSL, Docker, uv, Node, gh, gitleaks)
-├── handoff-prompts/              Numbered orchestrator handoffs (latest: #3) + implementer kickoffs
+├── handoff-prompts/              Numbered orchestrator handoffs (latest: #4) + implementer kickoffs
 ├── .claude/                      settings.json (handoff hooks), hooks/handoff-check.py, skills/handoff/SKILL.md
 ├── .github/workflows/ci.yml      Jobs: api, web, secrets
 ├── .gitignore / .gitattributes / .gitleaks.toml / .pre-commit-config.yaml
@@ -154,7 +154,7 @@ make db-reset                   # DELETES the local DB volume and re-creates it
 make db-psql                    # psql as feynman_migrator
 ```
 
-Local results at the end of Phase 2a (`32b5327`): **235 pytest and 98 vitest tests pass; `make check` passes; gitleaks clean.** CI on the 2a branch: green (PR #2).
+Local results at the end of Phase 2a (after the fix-up, `5d0e027`): **238 pytest and 99 vitest tests pass; `make check` passes; gitleaks clean.** CI on the 2a branch: green (run 42581239361 at `cd2883b`).
 
 ### Gotchas
 - **The worker must be running** (`make worker`) or uploaded PDFs stay `processing` until the UI's 10-minute polling gives up. It processes one job at a time with a lease (`JOB_LEASE_SECONDS`); handlers must be idempotent on reclaim.
@@ -170,7 +170,7 @@ Local results at the end of Phase 2a (`32b5327`): **235 pytest and 98 vitest tes
 - Postgres 18 images keep data under `/var/lib/postgresql/18/docker`; the volume mounts the parent `/var/lib/postgresql`.
 - TypeScript is pinned `~5.9` because `openapi-typescript` peers on it. `npm audit` reports 10 moderate dev-only advisories (minimatch via eslint); the only fix forces an ESLint downgrade and was not applied.
 - `.superpowers/` is gitignored agent scratch space: never commit or link to it.
-- CI (`.github/workflows/ci.yml`) was green on Phase 1; for the 2a branch see the PR.
+- CI (`.github/workflows/ci.yml`) has jobs api, web, secrets, with actions pinned by SHA. The secrets job downloads gitleaks with an **authenticated** `gh release download` (workflow token, 3 retries) plus a sha256 check. Anonymous `curl` downloads were throttled (504) during a GitHub incident. If a run fails with zero steps, it's an account/billing problem, not the code.
 
 ---
 
@@ -213,6 +213,19 @@ Local results at the end of Phase 2a (`32b5327`): **235 pytest and 98 vitest tes
 - whenever the owner's prompt mentions a handoff or a new agent session: if they're asking for one, run the skill.
 
 If you see a `[handoff-hook]` note in your context, follow it as described here. Token counts are an estimate taken from the last assistant turn's usage record. The thresholds can be changed with the `HANDOFF_WARN_TOKENS` and `HANDOFF_URGENT_TOKENS` environment variables.
+
+### Implementer sessions start cold (owner's rule)
+**Every phase, and every fix-up round, runs in a brand-new implementer session** that has none of the orchestrator's context. Its plan and kickoff prompt must therefore carry everything it needs to catch up:
+- **The kickoff prompt** (`handoff-prompts/implementer-*.md`) opens with a numbered **"Read these first, in order"** list:
+  - `CLAUDE.md`
+  - the relevant `memory.md` entries, **named**
+  - the plan
+  - the design
+  - the ADRs the phase depends on, **by number**
+  - earlier phases' plans only for the constraints they carry over
+  It also has a **preflight**: the branch to check out, the expected `git status`, and the `make check` baseline with its expected test counts.
+- **The plan** (`docs/implementation-plan-phase-*.md`) has a **"Context for a fresh implementer"** section before Task 0. It lists the **existing code** the phase builds on, as file paths with the names to reuse: fixtures, helpers, dependencies, protocols, and patterns to copy. It also says what each one is for. A task's **Interfaces → Consumes** block names the exact earlier-phase symbols it uses (module path + name), so a per-task subagent seeing only its own task can find them.
+- If a previous phase's run left resume prompts or deferred items that matter, the kickoff points to them by path.
 
 ### Decision process (owner's rule)
 **Every design decision must be explained before implementation, and the owner has the final say.** For each choice (stack, provider, schema, auth, hosting), present the options, the trade-offs, and a recommendation with reasoning. Then wait for approval before writing code that depends on it. Don't make silent architectural choices.
