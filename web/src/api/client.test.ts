@@ -102,6 +102,24 @@ describe("client middleware", () => {
   });
 });
 
+describe("signedOut clears csrf", () => {
+  it("sends no token after setCsrfToken(null)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(new Response("{}", { status: 200 })),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    setCsrfToken("tok");
+    setCsrfToken(null);
+    await api.POST("/auth/logout");
+    expect(
+      (fetchMock.mock.calls[0][0] as Request).headers.has("X-CSRF-Token"),
+    ).toBe(false);
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("errorMessage", () => {
   it("returns the API message when present", () => {
     expect(errorMessage({ error: { code: "c", message: "Nope" } })).toBe(

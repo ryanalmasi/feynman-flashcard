@@ -33,15 +33,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const { data, response } = await api.GET("/auth/session");
+      const { data } = await api.GET("/auth/session");
       if (data) signedIn(data);
-      else if (response.status === 401) signedOut();
+      else signedOut(); // 401, 5xx or any non-success: never stay "loading"
     } catch {
       signedOut();
     }
   }, [signedIn, signedOut]);
 
   useEffect(() => {
+    // Mount-time session check; the rule flags the (async) state updates inside refresh().
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);

@@ -2,7 +2,9 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RequireAuth from "@/components/RequireAuth";
+import { api } from "@/api/client";
 import { AuthProvider } from "./AuthProvider";
+import { useAuth } from "./useAuth";
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
@@ -97,5 +99,82 @@ describe("RequireAuth", () => {
       await screen.findByRole("heading", { name: "Register" }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent("/register");
+  });
+
+  it("treats a 500 from /auth/session as signed out", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          json(
+            {
+              error: { code: "internal_error", message: "x", details: null },
+            },
+            500,
+          ),
+        ),
+      ),
+    );
+    setup("/sets/abc");
+    expect(
+      await screen.findByRole("heading", { name: "Login" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("where")).toHaveTextContent(
+      "/login?next=%2Fsets%2Fabc",
+    );
+  });
+
+  it("treats a network failure on /auth/session as signed out", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("down")));
+    setup("/sets/abc");
+    expect(
+      await screen.findByRole("heading", { name: "Login" }),
+    ).toBeInTheDocument();
+  });
+
+  it("signedOut() clears the CSRF token", async () => {
+    const fetchMock = vi.fn().mockImplementation((req: Request) =>
+      Promise.resolve(
+        req.method === "GET"
+          ? json(
+              {
+                csrf_token: "t",
+                user: { id: "1", email: "a@b.co", created_at: "x" },
+              },
+              200,
+            )
+          : json({}, 200),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    function Out() {
+      const { signedOut, status } = useAuth();
+      return <button onClick={signedOut}>out-{status}</button>;
+    }
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <Out />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    const btn = await screen.findByRole("button", { name: "out-signed_in" });
+    btn.click();
+    await screen.findByRole("button", { name: "out-signed_out" });
+    await api.POST("/auth/logout");
+    const last = fetchMock.mock.calls.at(-1)![0] as Request;
+    expect(last.headers.has("X-CSRF-Token")).toBe(false);
+  });
+});
+
+describe("useAuth", () => {
+  it("throws outside the provider", () => {
+    function Bad() {
+      useAuth();
+      return null;
+    }
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => render(<Bad />)).toThrow(/AuthProvider/);
+    spy.mockRestore();
   });
 });

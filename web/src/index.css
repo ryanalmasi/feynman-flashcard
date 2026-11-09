@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Class-based dark variant: no .dark class exists, so dark: utilities never apply. */
+@custom-variant dark (&:is(.dark *));
+
 @theme inline {
   --font-sans: var(--font-family-sans);
   --color-background: var(--background);

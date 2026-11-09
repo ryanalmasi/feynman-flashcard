@@ -1,10 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { AuthProvider } from "./auth/AuthProvider";
 
 describe("App", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("renders the not-found page for unknown routes", () => {
     vi.stubGlobal("fetch", () => new Promise(() => {}));
     render(
