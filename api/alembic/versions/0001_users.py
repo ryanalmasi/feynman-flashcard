@@ -64,6 +64,9 @@ def upgrade() -> None:
             "provider", "provider_subject", name="uq_auth_identities_provider_subject"
         ),
     )
+    # Default privileges (infra/postgres/init/01-roles.sh) would let the app role read and write
+    # Alembic's own bookkeeping table. Only the migrator may touch migration state.
+    op.execute("REVOKE ALL ON TABLE alembic_version FROM feynman_app")
 
 
 def downgrade() -> None:

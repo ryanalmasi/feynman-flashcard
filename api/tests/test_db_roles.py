@@ -97,3 +97,15 @@ async def test_app_cannot_connect_to_postgres_database(
         causes.append(current)
         current = current.__cause__ or current.__context__
     assert any(isinstance(c, InsufficientPrivilegeError) for c in causes)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    ["SELECT * FROM alembic_version", "UPDATE alembic_version SET version_num = 'x'"],
+)
+async def test_app_cannot_touch_alembic_version(
+    app_connection: AsyncConnection, statement: str
+) -> None:
+    with pytest.raises(ProgrammingError) as exc:
+        await app_connection.execute(text(statement))
+    assert isinstance(exc.value.orig.__cause__, InsufficientPrivilegeError)  # type: ignore[union-attr]
