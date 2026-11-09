@@ -11,6 +11,7 @@ dependencies = [
     "fastapi>=0.162.2",
     "httpx>=0.28.1",
     "pydantic-settings>=2.16.2",
+    "pypdfium2>=5.15.1",
     "python-multipart>=0.0.33",
     "sqlalchemy[asyncio]>=2.1.8",
     "uvicorn[standard]>=0.54.0",
@@ -36,6 +37,10 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF"]
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["pypdfium2", "pypdfium2.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
