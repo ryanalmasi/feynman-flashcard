@@ -2,6 +2,8 @@
 
 Guidance for Claude Code sessions in this repository. It describes what the repo **currently is**, not what it is meant to become. The product vision is covered separately below so the two don't get mixed up.
 
+> **Planning status (2026-11-09):** Phase 1 is fully planned and approved but not started. Read `memory.md`, `docs/adr/`, and `docs/implementation-plan.md`. The repo now lives at `~/code/feynman-flashcard` (WSL filesystem); the `/mnt/c/...` copy is stale. The sections below still describe the old prototype until Phase 1 Task 9 rewrites this file.
+>
 > **Status:** Early prototype, dormant since Jan 2025. The code was written by hand with ChatGPT pasting, with no agentic tooling. There are no tests, no CI, no migrations, and no Docker. Several features shown in the UI are placeholders. Expect bugs (listed in [Known Issues](#known-issues--gaps)).
 
 ---
@@ -38,7 +40,7 @@ feynman-flashcard/
 ├── CLAUDE.md                     ← this file
 ├── docs/planning-handoff.md      Design + research doc: roadmap (§0), scoring design, providers, costs, pricing, open decisions
 ├── memory.md                     Running project context + completed work. Read right after this file; update FIRST on every handoff
-├── handoff-prompts/              Numbered prompts for starting the next agent session (orchestrator-handoff-N.md). Latest: #1. Written LAST in a handoff
+├── handoff-prompts/              Numbered prompts for starting the next agent session (orchestrator-handoff-N.md). Latest: #2, plus implementer-phase-1.md. Written LAST in a handoff
 ├── .claude/                      Project Claude Code config: settings.json (handoff hooks), hooks/handoff-check.py, skills/handoff/SKILL.md
 ├── README.md                     Setup instructions (partly inaccurate, see Running Locally)
 ├── LICENSE                       MIT
