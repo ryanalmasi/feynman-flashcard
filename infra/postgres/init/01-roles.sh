@@ -11,6 +11,7 @@ CREATE ROLE feynman_migrator LOGIN PASSWORD :'mig_pw';
 CREATE ROLE feynman_app LOGIN PASSWORD :'app_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
 CREATE DATABASE feynman OWNER feynman_migrator;
 CREATE DATABASE feynman_test OWNER feynman_migrator;
+REVOKE CONNECT, TEMPORARY ON DATABASE postgres FROM PUBLIC;
 SQL
 
 for db in feynman feynman_test; do

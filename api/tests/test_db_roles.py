@@ -3,9 +3,11 @@ import uuid
 import pytest
 from asyncpg.exceptions import InsufficientPrivilegeError  # type: ignore[import-untyped]
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError, ProgrammingError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 
+from feynman_api.config import Settings
 from feynman_api.models import AuthIdentity, User
 
 
@@ -76,3 +78,22 @@ async def test_identity_cascade_on_user_delete(db_session: AsyncSession) -> None
         )
     ).scalar_one()
     assert count == 0
+
+
+async def test_app_cannot_connect_to_postgres_database(
+    migrated_db: None, test_settings: Settings
+) -> None:
+    url = make_url(test_settings.database_url.get_secret_value()).set(database="postgres")
+    engine = create_async_engine(url)
+    try:
+        with pytest.raises(Exception) as exc:
+            async with engine.connect():
+                pass
+    finally:
+        await engine.dispose()
+    causes: list[BaseException] = []
+    current: BaseException | None = exc.value
+    while current is not None and current not in causes:
+        causes.append(current)
+        current = current.__cause__ or current.__context__
+    assert any(isinstance(c, InsufficientPrivilegeError) for c in causes)
