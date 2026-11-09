@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RegisterPage from "./RegisterPage";
-import { apiError, json, renderAt, session, stubFetch } from "./testUtils";
+import { apiError, json, renderAt, session, stubFetch } from "@/test/pageUtils";
 
 const routes = (
   <Routes>
@@ -15,6 +15,28 @@ const routes = (
 const notAuth = () => json(apiError("not_authenticated", "x"), 401);
 
 afterEach(() => vi.unstubAllGlobals());
+
+const BRIEF_RE = /\b13\b|\bage\b|old enough/i;
+const WIDE_RE =
+  /\b(1[3-9]|2[01])\b|\bage\b|\bold(er)?\b|young|minimum|eligible|must be|adult|minor|teen|under\s*\d|years?\s+old/i;
+
+/** Text content plus placeholder/aria-label/title/alt/aria-describedby copy. */
+function visibleCopy(root: HTMLElement): string[] {
+  const out = [root.textContent ?? ""];
+  root.querySelectorAll("*").forEach((el) => {
+    for (const a of ["placeholder", "aria-label", "title", "alt"]) {
+      const v = el.getAttribute(a);
+      if (v) out.push(v);
+    }
+    el.getAttribute("aria-describedby")
+      ?.split(/\s+/)
+      .forEach((id) => {
+        const t = root.querySelector("#" + id)?.textContent;
+        if (t) out.push(t);
+      });
+  });
+  return out;
+}
 
 async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
   await user.type(await screen.findByLabelText("Email"), "a@b.co");
@@ -57,12 +79,30 @@ describe("RegisterPage", () => {
     expect(year.value).toBe("");
   });
 
-  it("no visible text outside the year <option>s matches the age regex", async () => {
+  it("no visible text or attribute outside the year <option>s mentions an age limit", async () => {
     stubFetch({ "GET /auth/session": notAuth });
     const { container } = renderAt("/register", routes);
     await screen.findByLabelText("Email");
     container.querySelectorAll("#birth-year option").forEach((n) => n.remove());
-    expect(container.textContent).not.toMatch(/\b13\b|\bage\b|old enough/i);
+    const texts = visibleCopy(container);
+    expect(texts.join("\n")).not.toMatch(BRIEF_RE);
+    expect(texts.join("\n")).not.toMatch(WIDE_RE);
+  });
+
+  it("the wide age-copy check catches typical age-gate wording", async () => {
+    stubFetch({ "GET /auth/session": notAuth });
+    const { container } = renderAt("/register", routes);
+    await screen.findByLabelText("Email");
+    for (const copy of ["You must be 18 or older", "Adults only"]) {
+      const p = document.createElement("p");
+      p.textContent = copy;
+      container.appendChild(p);
+      expect(visibleCopy(container).join("\n")).toMatch(WIDE_RE);
+      p.remove();
+    }
+    const input = container.querySelector("input")!;
+    input.setAttribute("placeholder", "Must be an adult");
+    expect(visibleCopy(container).join("\n")).toMatch(WIDE_RE);
   });
 
   it.each([
@@ -105,17 +145,52 @@ describe("RegisterPage", () => {
     });
   });
 
-  it("validates client-side: short password and missing fields send nothing", async () => {
+  it("short password shows the hint as an error (aria-invalid) and sends nothing", async () => {
     const user = userEvent.setup();
     const fetchMock = stubFetch({ "GET /auth/session": notAuth });
     renderAt("/register", routes);
     await user.type(await screen.findByLabelText("Email"), "a@b.co");
     await user.type(screen.getByLabelText("Password"), "short");
+    await user.selectOptions(screen.getByLabelText("Birth month"), "3");
+    await user.selectOptions(screen.getByLabelText("Birth year"), "1999");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "At least 12 characters",
+    );
+    expect(screen.getByLabelText("Password")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1); // only the session check
+  });
+
+  it("missing fields block submission", async () => {
+    const user = userEvent.setup();
+    const fetchMock = stubFetch({ "GET /auth/session": notAuth });
+    renderAt("/register", routes);
+    await user.type(await screen.findByLabelText("Email"), "a@b.co");
+    await user.type(screen.getByLabelText("Password"), "correct-horse-battery");
     await user.click(screen.getByRole("button", { name: "Create account" }));
     expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a network failure shows a generic error and re-enables the button", async () => {
+    const user = userEvent.setup();
+    stubFetch({
+      "GET /auth/session": notAuth,
+      "POST /auth/register": () => {
+        throw new TypeError("down");
+      },
+    });
+    renderAt("/register", routes);
+    await fillAndSubmit(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Something went wrong. Try again.",
+    );
     expect(
-      fetchMock.mock.calls.some((c) => (c[0] as Request).method === "POST"),
-    ).toBe(false);
+      screen.getByRole("button", { name: "Create account" }),
+    ).toBeEnabled();
   });
 
   it("links to login", async () => {

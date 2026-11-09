@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RequireAuth from "@/components/RequireAuth";
@@ -180,15 +180,31 @@ describe("useAuth", () => {
 });
 
 describe("unauthenticated handler on auth pages", () => {
+  async function fire(path: string) {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(json(unauth, 401)));
+    vi.stubGlobal("fetch", fetchMock);
+    setup(path);
+    await screen.findByTestId("where");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1)); // session check
+    await api.POST("/auth/logout"); // resolves after the handler has run
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  }
+
   it("a not_authenticated 401 while on /login does not add a next param", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(() => Promise.resolve(json(unauth, 401))),
+    await fire("/login");
+    await waitFor(() =>
+      expect(screen.getByTestId("where")).toHaveTextContent(/^\/login$/),
     );
-    setup("/login");
-    await screen.findByRole("heading", { name: "Login" });
-    await api.POST("/auth/logout");
-    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByRole("heading", { name: "Login" })).toBeInTheDocument();
+  });
+
+  it("a not_authenticated 401 while on /register goes to plain /login", async () => {
+    await fire("/register");
+    expect(
+      await screen.findByRole("heading", { name: "Login" }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent(/^\/login$/);
   });
 });

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import LoginPage from "./LoginPage";
-import { apiError, json, renderAt, session, stubFetch } from "./testUtils";
+import { apiError, json, renderAt, session, stubFetch } from "@/test/pageUtils";
 
 const routes = (
   <Routes>
@@ -98,6 +98,23 @@ describe("LoginPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Too many attempts. Try again later.",
     );
+  });
+
+  it("a network failure shows a generic error and re-enables the button", async () => {
+    const user = userEvent.setup();
+    stubFetch({
+      "GET /auth/session": notAuth,
+      "POST /auth/login": () => {
+        throw new TypeError("down");
+      },
+    });
+    renderAt("/login", routes);
+    await fill(user);
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Something went wrong. Try again.",
+    );
+    expect(screen.getByRole("button", { name: "Log in" })).toBeEnabled();
   });
 
   it("disables the button while submitting", async () => {

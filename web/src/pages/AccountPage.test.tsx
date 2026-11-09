@@ -4,7 +4,7 @@ import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RequireAuth from "@/components/RequireAuth";
 import AccountPage from "./AccountPage";
-import { apiError, json, renderAt, session, stubFetch } from "./testUtils";
+import { apiError, json, renderAt, session, stubFetch } from "@/test/pageUtils";
 
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", async (orig) => ({
@@ -117,5 +117,44 @@ describe("AccountPage", () => {
       ),
     ).toBe(true);
     expect(screen.getByTestId("where")).toHaveTextContent(/^\/login$/);
+  });
+
+  it("a network failure shows a generic error and re-enables the button", async () => {
+    const user = userEvent.setup();
+    stubFetch({
+      "GET /auth/session": () => json(session, 200),
+      "DELETE /auth/account": () => {
+        throw new TypeError("down");
+      },
+    });
+    renderAt("/account", routes);
+    await openDialog(user);
+    await user.type(screen.getByLabelText("Password"), "right-password-123");
+    await user.click(screen.getByRole("button", { name: "Delete my account" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Something went wrong. Try again.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Delete my account" }),
+    ).toBeEnabled();
+  });
+
+  it("a not_authenticated 401 mid-delete signs out and lands on /login?next=%2Faccount", async () => {
+    const user = userEvent.setup();
+    stubFetch({
+      "GET /auth/session": () => json(session, 200),
+      "DELETE /auth/account": () =>
+        json(apiError("not_authenticated", "Not authenticated."), 401),
+    });
+    renderAt("/account", routes);
+    await openDialog(user);
+    await user.type(screen.getByLabelText("Password"), "right-password-123");
+    await user.click(screen.getByRole("button", { name: "Delete my account" }));
+    expect(
+      await screen.findByRole("heading", { name: "Login" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("where")).toHaveTextContent(
+      "/login?next=%2Faccount",
+    );
   });
 });
