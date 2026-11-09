@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: env db db-down db-reset db-psql migrate api web gen-types
+.PHONY: env db db-down db-reset db-psql migrate api web gen-types test lint check
 
 env:
 	./scripts/dev-env.sh
@@ -35,3 +35,16 @@ web:
 gen-types:
 	cd api && uv run python -m feynman_api.openapi_dump > ../web/openapi.json
 	cd web && npx openapi-typescript openapi.json -o src/api/schema.gen.ts
+
+lint:
+	cd api && uv run ruff check && uv run ruff format --check && uv run mypy src tests
+	cd web && npm run lint && npm run format:check && npm run typecheck
+
+test:
+	cd api && uv run pytest
+	cd web && npm test
+
+check: lint test
+	cd web && npm run build
+	$(MAKE) gen-types
+	git diff --exit-code web/src/api/schema.gen.ts
