@@ -2,12 +2,23 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
-Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-Description = Annotated[str, Field(max_length=1000)]
-Front = Annotated[str, Field(min_length=1, max_length=500)]
-Back = Annotated[str, Field(min_length=1, max_length=2000)]
+
+def _no_nul(value: str) -> str:
+    # Postgres text cannot hold NUL; reject it as a validation error instead of a 500.
+    if "\x00" in value:
+        raise ValueError("must not contain NUL characters")
+    return value
+
+
+NoNul = AfterValidator(_no_nul)
+Title = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120), NoNul
+]
+Description = Annotated[str, Field(max_length=1000), NoNul]
+Front = Annotated[str, Field(min_length=1, max_length=500), NoNul]
+Back = Annotated[str, Field(min_length=1, max_length=2000), NoNul]
 
 
 def _reject_blank(value: str | None) -> None:

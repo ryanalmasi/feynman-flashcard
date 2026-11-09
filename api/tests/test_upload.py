@@ -205,6 +205,10 @@ async def test_upload_filename_never_used_as_path(
     ("raw", "expected"),
     [
         ("a\x01b\x7f.pdf", "ab.pdf"),
+        ("a \x01 b.pdf", "a b.pdf"),
+        ("evil\u202egnp.pdf", "evilgnp.pdf"),
+        ("a\u200b\ufeffb\u2066c\u2069.pdf", "abc.pdf"),
+        ("a\x00b.pdf", "ab.pdf"),
         ("a" * 300 + ".pdf", None),
         ("", "document.pdf"),
         ("/", "document.pdf"),
@@ -220,6 +224,13 @@ def test_display_name(raw: str, expected: str | None) -> None:
     else:
         assert out == expected
     assert display_name(None) == "document.pdf"
+
+
+def test_display_name_truncation_leaves_no_trailing_space() -> None:
+    from feynman_api.routes.documents import display_name
+
+    out = display_name("a" * 254 + " b.pdf")
+    assert out == "a" * 254
 
 
 def test_title_from_filename() -> None:
@@ -257,3 +268,58 @@ async def test_upload_db_failure_removes_file(
     r = await post(user_client, multipart(PDF))
     assert r.status_code == 500
     await assert_nothing_stored(db, file_store)
+
+
+async def test_upload_failure_after_commit_keeps_file(
+    user_client: httpx.AsyncClient,
+    file_store: LocalFileStore,
+    db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def boom(*_a: object, **_k: object) -> None:
+        raise RuntimeError("after commit")
+
+    monkeypatch.setattr("feynman_api.routes.documents._to_out", boom)
+    r = await post(user_client, multipart(PDF))
+    assert r.status_code == 500
+    doc = (await db.execute(select(Document))).scalar_one()
+    assert [p.name for p in stored_files(file_store._root)] == [doc.storage_key]
+
+
+@pytest.mark.parametrize("origin_case", ["declared", "chunked"])
+async def test_upload_413_has_cors_headers(
+    user_client: httpx.AsyncClient, test_settings: Settings, origin_case: str
+) -> None:
+    if origin_case == "declared":
+        r = await post(user_client, multipart(PDF), extra={"Content-Length": "30000000"})
+    else:
+        cap = test_settings.max_upload_bytes + test_settings.upload_multipart_allowance_bytes
+
+        async def body() -> AsyncIterator[bytes]:
+            yield _head()
+            for _ in range(cap // 65536 + 2):
+                yield b"x" * 65536
+
+        r = await post(user_client, body())
+    assert r.status_code == 413
+    assert r.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+async def test_upload_title_validation(
+    user_client: httpx.AsyncClient, db: AsyncSession, file_store: LocalFileStore
+) -> None:
+    r = await post(user_client, multipart(PDF, title="x" * 121))
+    assert r.status_code == 422 and r.json()["error"]["code"] == "validation_error"
+    r = await post(user_client, multipart(PDF, title="a\x00b"))
+    assert r.status_code == 422
+    await assert_nothing_stored(db, file_store)
+    r = await post(user_client, multipart(PDF, title=" " * 200))  # blank -> derived
+    assert r.status_code == 202 and r.json()["study_set"]["title"] == "text"
+    r = await post(user_client, multipart(PDF, title=" " + "y" * 120 + " "))  # 120 after strip
+    assert r.status_code == 202
+
+
+async def test_upload_filename_with_nul(user_client: httpx.AsyncClient) -> None:
+    r = await post(user_client, multipart(PDF, filename="a%00b.pdf".replace("%00", "\x00")))
+    assert r.status_code == 202
+    assert r.json()["document"]["original_filename"] == "ab.pdf"

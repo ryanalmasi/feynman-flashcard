@@ -179,3 +179,20 @@ async def test_list_sets_is_one_query(user_client: httpx.AsyncClient, app: FastA
         assert sum("study_sets" in s for s in statements) == 1
     finally:
         event.remove(engine, "before_cursor_execute", count)
+
+
+async def test_nul_character_rejected_with_422(user_client: httpx.AsyncClient) -> None:
+    h = await auth_headers(user_client)
+    r = await user_client.post("/study-sets", json={"title": "a\x00b"}, headers=h)
+    assert r.status_code == 422
+    r = await user_client.post(
+        "/study-sets", json={"title": "ok", "description": "a\x00b"}, headers=h
+    )
+    assert r.status_code == 422
+    s = await user_client.post("/study-sets", json={"title": "ok"}, headers=h)
+    sid = s.json()["id"]
+    r = await user_client.patch(f"/study-sets/{sid}", json={"title": "a\x00b"}, headers=h)
+    assert r.status_code == 422
+    for body in ({"front": "a\x00", "back": "b"}, {"front": "a", "back": "b\x00"}):
+        r = await user_client.post(f"/study-sets/{sid}/flashcards", json=body, headers=h)
+        assert r.status_code == 422

@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from feynman_api.auth.dependencies import CurrentUser, current_user
@@ -40,14 +41,27 @@ _TITLE_MAX = 120
 def display_name(raw: str | None) -> str:
     """Sanitised display-only filename. Never used to build a path."""
     name = re.split(r"[/\\]", raw or "")[-1]
-    name = " ".join(name.split())  # collapses whitespace, including tab/newline
-    name = "".join(c for c in name if unicodedata.category(c) != "Cc").strip()
-    return name[:_FILENAME_MAX] or _DEFAULT_NAME
+    # Drop control (Cc) and format (Cf, e.g. bidi overrides, zero-width) characters first.
+    name = "".join(c for c in name if unicodedata.category(c) not in ("Cc", "Cf"))
+    name = " ".join(name.split())
+    return name[:_FILENAME_MAX].strip() or _DEFAULT_NAME
 
 
 def title_from_filename(name: str) -> str:
     base = re.sub(r"\.pdf$", "", display_name(name), flags=re.IGNORECASE)
     return base[:_TITLE_MAX].strip() or "Untitled PDF"
+
+
+def _validated_title(title: str | None) -> str | None:
+    """Same constraints as StudySetCreate.title: strip, then 1-120 chars, no NUL."""
+    stripped = (title or "").strip()
+    if not stripped:
+        return None
+    if len(stripped) > _TITLE_MAX or "\x00" in stripped:
+        raise RequestValidationError(
+            [{"type": "value_error", "loc": ("body", "title"), "msg": "invalid title", "input": ""}]
+        )
+    return stripped
 
 
 def _to_out(doc: Document) -> DocumentOut:
@@ -68,9 +82,10 @@ async def upload_document(
     db: Db,
     current: Current,
     file_store: Annotated[FileStore, Depends(get_file_store)],
-    title: Annotated[str | None, Form(max_length=_TITLE_MAX)] = None,
+    title: Annotated[str | None, Form()] = None,
 ) -> UploadOut:
     max_bytes = request.app.state.settings.max_upload_bytes
+    given_title = _validated_title(title)
     head = await file.read(len(_PDF_MAGIC))
     if head != _PDF_MAGIC:
         raise unsupported_file_type()
@@ -91,7 +106,7 @@ async def upload_document(
         study_set = StudySet(
             id=uuid.uuid4(),
             user_id=current.user.id,
-            title=(title or "").strip() or title_from_filename(name),
+            title=given_title or title_from_filename(name),
         )
         doc = Document(
             id=uuid.uuid4(),
@@ -107,8 +122,8 @@ async def upload_document(
         await enqueue(
             db, kind="extract_pdf", payload={"document_id": str(doc.id)}, user_id=current.user.id
         )
+        await db.refresh(study_set)  # load server-default timestamps before committing
         await db.commit()
-        await db.refresh(study_set)
     except BaseException:
         await asyncio.shield(file_store.delete(key))
         raise
