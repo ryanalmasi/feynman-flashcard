@@ -1,11 +1,9 @@
 import uuid
-from typing import Any
 
 import httpx
 import pytest
-from conftest import ORIGIN
+from conftest import ORIGIN, walk_routes
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
 
 from feynman_api.auth.csrf import UNSAFE_METHODS
 
@@ -26,17 +24,6 @@ def _unsafe_routes(app: FastAPI) -> list[tuple[str, str]]:
     )
 
 
-def _walk(routes: Any) -> list[APIRoute]:
-    found: list[APIRoute] = []
-    for route in routes:
-        if isinstance(route, APIRoute):
-            found.append(route)
-        nested = getattr(route, "original_router", None)
-        if nested is not None:
-            found.extend(_walk(nested.routes))
-    return found
-
-
 def _fill(path: str) -> str:
     return "/".join(str(uuid.uuid4()) if p.startswith("{") else p for p in path.split("/"))
 
@@ -48,7 +35,7 @@ async def test_every_unsafe_route_enforces_origin_and_csrf(
     assert routes and ("POST", "/auth/logout") in routes
     hidden = [
         (sorted(r.methods or []), r.path)
-        for r in _walk(app.routes)
+        for r in walk_routes(app.routes)
         if not r.include_in_schema and (r.methods or set()) & UNSAFE_METHODS
     ]
     assert not hidden, f"unsafe routes outside the OpenAPI schema skip the matrix: {hidden}"

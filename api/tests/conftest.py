@@ -11,6 +11,7 @@ from alembic.config import Config
 from asgi_lifespan import LifespanManager
 from dotenv import dotenv_values
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 
@@ -250,3 +251,15 @@ async def other_user_client(
 ) -> AsyncIterator[httpx.AsyncClient]:
     async for client in _signed_in_client(app, "other@example.com"):
         yield client
+
+
+def walk_routes(routes: Any) -> list[APIRoute]:
+    """Every APIRoute, recursing into FastAPI's opaque `_IncludedRouter` entries."""
+    found: list[APIRoute] = []
+    for route in routes:
+        if isinstance(route, APIRoute):
+            found.append(route)
+        nested = getattr(route, "original_router", None)
+        if nested is not None:
+            found.extend(walk_routes(nested.routes))
+    return found
