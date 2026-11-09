@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -35,7 +36,29 @@ def _response(
     return JSONResponse(body.model_dump(), status_code=status, headers=headers)
 
 
+class AppError(Exception):
+    """Expected API error; rendered as the standard JSON shape with a fixed message."""
+
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        message: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
+        super().__init__(code)
+        self.status = status
+        self.code = code
+        self.message = message
+        self.headers = dict(headers) if headers else None
+
+
 def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(AppError)
+    async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
+        return _response(exc.status, exc.code, exc.message, headers=exc.headers)
+
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         code = _CODES.get(exc.status_code, "http_error")

@@ -32,7 +32,7 @@ async def test_default_enabled_is_hibp_and_client_closed(
 async def test_get_breach_checker_dependency(app) -> None:  # type: ignore[no-untyped-def]
     from starlette.requests import Request
 
-    from feynman_api.auth.deps import get_breach_checker
+    from feynman_api.auth.dependencies import get_breach_checker
 
     request = Request({"type": "http", "app": app, "headers": []})
     assert get_breach_checker(request) is app.state.breach_checker

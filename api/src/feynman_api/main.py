@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from feynman_api.auth.breach import BreachChecker, HibpBreachChecker, StaticBreachChecker
+from feynman_api.clock import Clock, system_clock
 from feynman_api.config import Settings
 from feynman_api.db import create_engine, create_sessionmaker
 from feynman_api.errors import ServerErrorJSONMiddleware, register_error_handlers
@@ -19,6 +20,7 @@ def create_app(
     *,
     file_store: FileStore | None = None,
     breach_checker: BreachChecker | None = None,
+    clock: Clock | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     default_store = file_store is None
@@ -52,6 +54,7 @@ def create_app(
     app = FastAPI(title="Feynman Flashcard API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.file_store = store
+    app.state.clock = clock or system_clock
     if breach_checker is not None:
         app.state.breach_checker = breach_checker
     # Last added is outermost: CORS wraps the 500 middleware so 500s carry CORS headers.

@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("var/uploads")
     hibp_enabled: bool = True
     hibp_timeout_seconds: float = 2.0
+    session_cookie_secure: bool = True
+    login_email_failure_limit: int = 5
+    login_ip_limit: int = 20
+    login_window_seconds: int = 900
+    register_ip_limit: int = 5
+    register_window_seconds: int = 3600
 
 
 class MigrationSettings(BaseSettings):

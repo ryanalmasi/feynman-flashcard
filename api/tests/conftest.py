@@ -1,5 +1,6 @@
 import os
 from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import asyncpg  # type: ignore[import-untyped]
@@ -20,6 +21,19 @@ from feynman_api.storage import LocalFileStore
 
 API_DIR = Path(__file__).resolve().parent.parent
 DB_HINT = "Test database is unreachable or not migrated. Run `make db` from the repo root first."
+
+
+class FrozenClock:
+    """Deterministic clock for tests: fixed `now`, moved only by `advance`."""
+
+    def __init__(self, now: datetime | None = None) -> None:
+        self.now = now or datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+    def advance(self, **kwargs: float) -> None:
+        self.now += timedelta(**kwargs)
+
+    def __call__(self) -> datetime:
+        return self.now
 
 
 def _env(name: str) -> str | None:
@@ -57,6 +71,7 @@ def test_settings() -> Settings:
         database_url=_test_database_url(),
         environment="test",
         hibp_enabled=False,
+        session_cookie_secure=False,
         _env_file=None,
     )
 
@@ -69,9 +84,17 @@ def file_store(tmp_path: Path) -> LocalFileStore:
 
 
 @pytest.fixture
-def app(migrated_db: None, test_settings: Settings, file_store: LocalFileStore) -> FastAPI:
+def clock() -> FrozenClock:
+    return FrozenClock()
+
+
+@pytest.fixture
+def app(
+    migrated_db: None, test_settings: Settings, file_store: LocalFileStore, clock: FrozenClock
+) -> FastAPI:
     return create_app(
         test_settings,
+        clock=clock,
         file_store=file_store,
         breach_checker=StaticBreachChecker({"breached-password-123"}),
     )

@@ -56,3 +56,24 @@ async def test_validation_422_shape(app: FastAPI, api_client: httpx.AsyncClient)
     assert error["code"] == "validation_error"
     assert error["details"]
     assert all({"loc", "msg"} <= set(d) for d in error["details"])
+
+
+async def test_app_error_shape_and_headers(app: FastAPI, api_client: httpx.AsyncClient) -> None:
+    from feynman_api.errors import AppError
+
+    @app.get("/limited")
+    async def limited() -> None:
+        raise AppError(
+            429, "rate_limited", "Too many attempts. Try again later.", headers={"Retry-After": "7"}
+        )
+
+    r = await api_client.get("/limited")
+    assert r.status_code == 429
+    assert r.headers["retry-after"] == "7"
+    assert r.json() == {
+        "error": {
+            "code": "rate_limited",
+            "message": "Too many attempts. Try again later.",
+            "details": None,
+        }
+    }
