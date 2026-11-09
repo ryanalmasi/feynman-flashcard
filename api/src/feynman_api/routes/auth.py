@@ -260,7 +260,7 @@ async def delete_account(
         try:
             await file_store.delete(key)
         except Exception as exc:
-            logger.warning("failed to delete stored file (%s)", type(exc).__name__)
+            logger.warning("failed to delete stored file %s (%s)", key, type(exc).__name__)
     response = Response(status_code=204)
     clear_session_cookie(response, _settings(request))
     return response

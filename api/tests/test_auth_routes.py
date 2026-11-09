@@ -1,7 +1,9 @@
+import logging
 import re
 import unicodedata
 import uuid
 from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 import pytest
@@ -12,7 +14,8 @@ from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from feynman_api.auth.passwords import needs_rehash
+from feynman_api.auth.breach import StaticBreachChecker
+from feynman_api.auth.passwords import needs_rehash, verify_dummy
 from feynman_api.auth.sessions import SESSION_COOKIE
 from feynman_api.config import Settings
 from feynman_api.main import create_app
@@ -268,6 +271,53 @@ async def test_delete_account_wrong_password_keeps_session(
     assert (await api_client.get("/auth/session")).status_code == 200
 
 
+TABLES = (
+    "users",
+    "auth_identities",
+    "auth_sessions",
+    "study_sets",
+    "flashcards",
+    "documents",
+    "document_pages",
+    "jobs",
+)
+
+
+async def _seed_user_data(db: AsyncSession, user_id: uuid.UUID, key: str) -> None:
+    set_id, doc_id = uuid.uuid4(), uuid.uuid4()
+    statements: list[tuple[str, dict[str, Any]]] = [
+        (
+            "insert into auth_identities (id, user_id, provider, provider_subject)"
+            " values (:i, :u, 'test', 'subject')",
+            {"i": uuid.uuid4(), "u": user_id},
+        ),
+        (
+            "insert into study_sets (id, user_id, title) values (:i, :u, 'T')",
+            {"i": set_id, "u": user_id},
+        ),
+        (
+            "insert into flashcards (id, study_set_id, front, back) values (:i, :s, 'f', 'b')",
+            {"i": uuid.uuid4(), "s": set_id},
+        ),
+        (
+            "insert into documents (id, study_set_id, storage_key, original_filename,"
+            " size_bytes, status) values (:i, :s, :k, 'a.pdf', 5, 'ready')",
+            {"i": doc_id, "s": set_id, "k": key},
+        ),
+        (
+            "insert into document_pages (document_id, page_number, text) values (:d, 1, 't')",
+            {"d": doc_id},
+        ),
+        (
+            "insert into jobs (id, user_id, kind, payload) values (:i, :u, 'k', '{}'::jsonb)",
+            {"i": uuid.uuid4(), "u": user_id},
+        ),
+    ]
+    for sql, params in statements:
+        await db.execute(text(sql), params)
+    await db.commit()
+
+
 async def test_delete_account_removes_rows_and_files(
     app: FastAPI,
     api_client: httpx.AsyncClient,
@@ -282,24 +332,109 @@ async def test_delete_account_removes_rows_and_files(
         yield b"%PDF-"
 
     await file_store.put(key, chunks())
-    set_id = uuid.uuid4()
-    await db.execute(
-        text("insert into study_sets (id, user_id, title) values (:i, :u, 'T')"),
-        {"i": set_id, "u": user_id},
-    )
-    await db.execute(
-        text(
-            "insert into documents (id, study_set_id, storage_key, original_filename, size_bytes,"
-            " status) values (:i, :s, :k, 'a.pdf', 5, 'ready')"
-        ),
-        {"i": uuid.uuid4(), "s": set_id, "k": key},
-    )
-    await db.commit()
+    await _seed_user_data(db, user_id, key)
+    for table in TABLES:
+        assert (await db.execute(text(f"select count(*) from {table}"))).scalar_one() > 0  # noqa: S608
     headers = await auth_headers(api_client)
     r = await api_client.request("DELETE", "/auth/account", json={"password": PW}, headers=headers)
     assert r.status_code == 204
-    for table in ("users", "auth_sessions", "study_sets", "documents"):
+    for table in TABLES:
         assert (await db.execute(text(f"select count(*) from {table}"))).scalar_one() == 0  # noqa: S608
     with pytest.raises(FileNotFoundError):
         file_store.open(key)
     assert SESSION_COOKIE not in api_client.cookies
+
+
+async def test_register_under_13_birthday_not_yet_this_year(
+    api_client: httpx.AsyncClient, clock: FrozenClock, db: AsyncSession
+) -> None:
+    now = clock()
+    assert now.month < 12
+    r = await register(api_client, birth_month=now.month + 1, birth_year=now.year - 13)
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "registration_not_allowed"
+    assert (await db.execute(text("select count(*) from users"))).scalar_one() == 0
+
+
+def _fullwidth(text_: str) -> str:
+    return "".join(chr(ord(c) + 0xFEE0) if c.isascii() and c.isalnum() else c for c in text_)
+
+
+async def test_register_password_judged_on_normalised_length(
+    api_client: httpx.AsyncClient,
+) -> None:
+    # Raw length >= 12 but normalised length < 12 (combining pairs compose): rejected.
+    composing = "e\u0301" * 6
+    assert len(composing) == 12 and len(unicodedata.normalize("NFKC", composing)) == 6
+    assert (await register(api_client, password=composing)).status_code == 422
+    # Raw length < 128 but normalised > 128 (ligature expands to 3 chars): rejected.
+    expanding = "\ufb03" * 43
+    assert len(expanding) < 128 and len(unicodedata.normalize("NFKC", expanding)) == 129
+    assert (await register(api_client, password=expanding)).status_code == 422
+    # Raw length < 12 but normalised == 12: accepted.
+    short_raw = "\ufb01" * 6
+    assert len(short_raw) == 6 and len(unicodedata.normalize("NFKC", short_raw)) == 12
+    assert (await register(api_client, password=short_raw)).status_code == 201
+
+
+async def test_breach_checker_receives_normalised_password(
+    migrated_db: None, test_settings: Settings, file_store: LocalFileStore
+) -> None:
+    normalised = "fullwidth-breach-" + "x" * 4
+    raw = _fullwidth(normalised)
+    assert raw != normalised and unicodedata.normalize("NFKC", raw) == normalised
+    app = create_app(
+        test_settings, file_store=file_store, breach_checker=StaticBreachChecker({normalised})
+    )
+    async with LifespanManager(app):
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            r = await register(client, password=raw)
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "password_breached"
+
+
+async def test_verify_dummy_only_for_unknown_email(
+    api_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = 0
+    real = verify_dummy
+
+    async def spy(password: str) -> None:
+        nonlocal calls
+        calls += 1
+        await real(password)
+
+    monkeypatch.setattr("feynman_api.routes.auth.verify_dummy", spy)
+    await register(api_client)
+    await _login(api_client, email="nobody@example.com", password="wrong-password-xx")  # noqa: S106
+    assert calls == 1
+    await _login(api_client, password="wrong-password-xx")  # noqa: S106
+    await _login(api_client)
+    assert calls == 1
+
+
+async def test_delete_account_file_delete_failure_still_204(
+    api_client: httpx.AsyncClient,
+    file_store: LocalFileStore,
+    db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    await register(api_client)
+    user_id = (await db.execute(text("select id from users"))).scalar_one()
+    key = uuid.uuid4().hex
+    await _seed_user_data(db, user_id, key)
+
+    async def boom(_key: str) -> None:
+        raise OSError("disk on fire")
+
+    monkeypatch.setattr(file_store, "delete", boom)
+    headers = await auth_headers(api_client)
+    with caplog.at_level(logging.WARNING):
+        r = await api_client.request(
+            "DELETE", "/auth/account", json={"password": PW}, headers=headers
+        )
+    assert r.status_code == 204
+    assert (await db.execute(text("select count(*) from users"))).scalar_one() == 0
+    assert any(rec.levelno == logging.WARNING and key in rec.getMessage() for rec in caplog.records)
