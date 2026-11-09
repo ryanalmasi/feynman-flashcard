@@ -4,16 +4,16 @@
 > **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
-**Last updated:** 2026-11-09 (Phase 1 fix-up round complete; pending orchestrator re-review, the owner's billing fix and merge)
-**Latest handoff written:** #2 (`handoff-prompts/orchestrator-handoff-2.md`), plus the implementer kickoff `handoff-prompts/implementer-phase-1.md`
+**Last updated:** 2026-11-09 (Phase 1 merged with CI green; Phase 2 decided through 2a: ADRs 0012–0018 and the approved 2a design. Next: write the 2a plan)
+**Latest handoff written:** #3 (`handoff-prompts/orchestrator-handoff-3.md`), plus the implementer kickoffs `handoff-prompts/implementer-phase-1.md` and `implementer-phase-1-fixups.md`
 
 ---
 
 ## 1. Project snapshot
 
 - **What it is:** a study tool built around the Feynman technique: the student teaches a topic to an AI, gets a multi-stage score and feedback, and reviews AI-generated flashcards built from their PDF or topic.
-- **What exists in code today:** the Phase 1 foundation on branch `phase-1-foundation`: FastAPI app with `GET /health`, Postgres 18 in Docker with migrator/app roles, migration `0001_users` (`users`, `auth_identities`), LLM/embedder interfaces with fakes and contract tests, a Vite React TS status page with a generated typed API client, `make` targets, pre-commit + gitleaks, and a GitHub Actions workflow (unverified, see the session log). No product features yet. `CLAUDE.md` and `README.md` describe this structure; the Jan-2025 prototype is in git history at `5aba556`.
-- **Current phase:** **Phase 1 implemented, awaiting orchestrator review of the draft PR and the owner's merge.** Then Phase 2 planning. Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
+- **What exists in code today:** the Phase 1 foundation, merged to `main` (`3185eb1`): FastAPI app with `GET /health`, Postgres 18 in Docker with migrator/app roles, migration `0001_users` (`users`, `auth_identities`), LLM/embedder interfaces with fakes and contract tests, a Vite React TS status page with a generated typed API client, `make` targets, pre-commit + gitleaks, and a GitHub Actions workflow (green). No product features yet. `CLAUDE.md` and `README.md` describe this structure; the Jan-2025 prototype is in git history at `5aba556`.
+- **Current phase:** **Phase 1 complete and merged (2026-11-09). Phase 2 (MVP) is split into 2a/2b/2c (ADR 0012). 2a's decisions are made and its design is approved; its task plan is not written yet.** Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
 - **Repo location (changed in session 2):** `~/code/feynman-flashcard` (WSL Linux filesystem). The old copy at `/mnt/c/Users/ryana/Documents/Github/feynman-flashcard` is **stale** and should be renamed or deleted. Don't work there.
 
 ## 2. Session log
@@ -55,6 +55,32 @@ Machine and setup decisions: **Docker Engine inside WSL** (not Docker Desktop); 
 
 **Still open (Phase 2 decisions, see the plan's Phase 2 outline):** LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling approach, job-queue library, file storage, MVP scope confirmation. Phase 3: voice, pricing/billing.
 
+### Session 3 (2026-11-09): Phase 1 review, fix-ups, merge; Phase 2 planning starts
+Model: Opus 5.5 (orchestrator). No application code written by the orchestrator.
+
+**Completed**
+1. Reviewed draft PR #1 task by task against the plan, spec §2–§4 and ADRs; re-ran `make check` locally (36 pytest / 7 vitest) and checked role privileges against the live DB. Verdict: conformant. Findings: F1 CI never ran (GitHub billing lock), F2 gitleaks path-allowlisted all `*.env.example`, F3 app role could CONNECT/TEMP on the `postgres` DB, F4 app role had DML on `alembic_version`, F5 health timeout untested, F6 status page treated any error body as a health body, F7 500s carry no CORS headers (deferred to Phase 2 M1), F8 hygiene.
+2. Wrote `handoff-prompts/implementer-phase-1-fixups.md`; the owner approved all fixes. A Sonnet implementer did F2–F6 + F8 (entry below). Orchestrator re-review: clean; `make check` 40 pytest / 8 vitest; action SHAs verified against their tags.
+3. The owner fixed the GitHub billing lock (the $0 "usage blocked" budgets were not the cause; it was an account-level lock). CI re-run **42547339617 green** on `ff0ae19`: api 16/16, web 17/17, secrets 6/6 steps (https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42547339617).
+4. **The owner merged PR #1 on 2026-11-09 (squash merge → `3185eb1` on `main`).** The per-task commits remain on the `phase-1-foundation` branch and in the PR.
+
+**Owner decisions:** approved fix-up scope including the new UI copy `API error (HTTP <status>)`, CI `push` trigger limited to `main`, actions pinned by SHA.
+
+5. **Phase 2 decision round (2a), each recorded as an ADR (all Accepted by the owner 2026-11-09):**
+| ADR | Decision |
+|---|---|
+| 0012 | MVP scope confirmed as planning doc §0 (generated flashcards stay in). Phase 2 split: **2a** auth + sets/cards + PDF upload/job queue (no LLM); **2b** Knowledge Map + generated cards; **2c** tutor + scoring + feedback + usage logging. Each its own branch, draft PR, owner merge |
+| 0013 | Age policy: **13+ neutral age screen** (birth month/year asked, never stored or logged); only `users.age_verified_at`. Account deletion is in 2a |
+| 0014 | UI: **Tailwind CSS 4 + shadcn/ui**; all design tokens in one file; screens use semantic token classes only; neutral theme + one accent, light mode. Owner chose this after viewing mockups, on condition it stays flexible |
+| 0015 | Job queue: **own `jobs` table + worker** (`FOR UPDATE SKIP LOCKED`, leases, backoff); not procrastinate (needs psycopg 3) or pgqueuer |
+| 0016 | Files: **local disk behind `FileStore`**, UUID keys; PDF only, 20 MB, 200 pages, text-based only; deleted with set/account |
+| 0017 | Auth details: **12-char password minimum** (owner's pick; below NIST's 15 for single-factor, recorded), max ≥ 64 (128), no composition rules; HIBP range API fail-open; Postgres-backed rate limits; per-session CSRF token + Origin check; SHA-256-hashed session tokens; 7-day idle / 30-day max; argon2-cffi |
+| 0018 | One PDF per study set; card front ≤ 500 / back ≤ 2000 plain text; `auth_sessions` vs later `study_sessions` naming; **pypdfium2**, PDF parsing only in the worker |
+6. Wrote the **2a design** `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`. A builder-check subagent raised 5 questions: the owner answered two (upload limit enforced by a pure-ASGI body-size cap on `/documents` + byte counting; extra deps approved: `email-validator`, `sonner`, `tw-animate-css`, `radix-ui` umbrella; **not** `next-themes`, `react-hook-form`, `zod`), and the orchestrator settled three, marked in the doc as its calls (per-email lockout blocks even the correct password, successes reset it; unexpected job errors are transient and exhausting retries fails the document with a generic message, UI polling stops after 10 min; only 401 `not_authenticated` logs the user out). **The owner approved the design on 2026-11-09.**
+7. Viewed UI mockups with the owner via the brainstorming visual companion (server needed `--host 0.0.0.0` to be reachable from the Windows browser under WSL; files under gitignored `.superpowers/`).
+
+**Still open:** 2b decisions (LLM provider + models with prices re-verified, provider data-retention/training settings, Knowledge Map details, card count/style); 2c decisions (embedding model, scoring parameters τ/weights/δ/insufficient-evidence threshold, tutor prompt and session limits, feedback format, usage-data retention). Launch-time: EU 13–15 users, ToS/privacy policy wording.
+
 ### Implementation run: Phase 1 fix-ups (2026-11-09)
 Model: Sonnet 5.5 implementer (single session, no subagents), following `handoff-prompts/implementer-phase-1-fixups.md` (orchestrator session 3 review of PR #1). Scope was closed: F2-F6 and F8 only. F1 (CI billing lock) is the owner's; F7 is deferred to Phase 2.
 
@@ -69,7 +95,7 @@ Model: Sonnet 5.5 implementer (single session, no subagents), following `handoff
 
 **Verification**
 - `make check` passes: **40 pytest** (36 + F3 +1, F4 +2, F5 +1) and **8 vitest** (7 + F6 +1); ruff, mypy strict, ESLint, Prettier, tsc, build and the types-drift check clean. `gitleaks git --redact -v .` clean. `git log --all --name-only | grep '.env'` (excluding examples): no output.
-- **CI is still NOT verified.** After the last push the runs (latest 42547257090, event `pull_request`) again failed with zero steps: "The job was not started because your account is locked due to a billing issue." Not retried; the owner must fix GitHub billing.
+- CI at the time was blocked by the GitHub billing lock (run 42547257090). **Superseded:** after the owner's billing fix, the re-run 42547339617 went green (see Session 3).
 
 **Deviations:** F3's test builds the engine from `TEST_DATABASE_URL` with the database swapped to `postgres` and walks the exception chain (SQLAlchemy wraps the asyncpg error). Otherwise none.
 
@@ -90,7 +116,7 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 
 **Verification**
 - Locally: 36 pytest tests and 7 vitest tests pass; `make check` passes (lint, test, build, types drift).
-- **CI is NOT verified.** The workflow ran twice (run ids 42543755654 and 42543763849; https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42543763849) and all three jobs failed with zero steps executed: "The job was not started because your account is locked due to a billing issue." The workflow was only statically reviewed. Assumptions untested on a real runner: the gitleaks tarball install, the Postgres service container, and the roles script over TCP. **The owner must resolve the GitHub billing issue, then re-run CI** (`gh run rerun <id>` or push a commit).
+- **CI was not verified at the time (superseded: green in run 42547339617, see Session 3).** The workflow ran twice (run ids 42543755654 and 42543763849; https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42543763849) and all three jobs failed with zero steps executed: "The job was not started because your account is locked due to a billing issue." The workflow was only statically reviewed. Assumptions untested on a real runner: the gitleaks tarball install, the Postgres service container, and the roles script over TCP. **The owner must resolve the GitHub billing issue, then re-run CI** (`gh run rerun <id>` or push a commit).
 - Owner's manual check (Task 7 step 5): the owner opened http://localhost:5173 in the Windows browser and confirmed it shows "API: ok" and "Database: ok".
 
 **Deviations from the plan (all reviewed; none change an ADR)**
@@ -110,7 +136,7 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 - `docs/planning-handoff.md` §1: only the "Old code" row was touched (adds the `5aba556` pointer).
 
 **Incomplete**
-- CI green status (billing lock, above).
+- ~~CI green status (billing lock, above).~~ **Resolved**: run 42547339617 green.
 - The draft PR is opened by the controller after the final whole-branch review.
 
 **Open items for the orchestrator/owner**
@@ -135,17 +161,19 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 
 ## 3. Repository state
 
-- **Path:** `~/code/feynman-flashcard`. **Branch:** `phase-1-foundation`, pushed to `origin`. `main` is unchanged at `e7bd5b9`.
-- **Draft PR:** https://github.com/ryanalmasi/feynman-flashcard/pull/1 (draft; not merged; owner merges after orchestrator review)
-- **Working tree:** clean after the fix-up round (head: see `git log`; all fix-up commits pushed). `.superpowers/` (agent scratch) is gitignored. `.env` files exist locally only and are gitignored.
+- **Path:** `~/code/feynman-flashcard`. **Branch:** `main` at `3185eb1` (squash merge of PR #1), pushed. `phase-1-foundation` still exists on `origin` (history of the per-task commits).
+- **PR #1:** https://github.com/ryanalmasi/feynman-flashcard/pull/1 — **merged** 2026-11-09. CI green (run 42547339617); post-merge CI on `main` (run 42548513765) also green.
+- **Uncommitted on `main` (orchestrator session 3; commit only when the owner asks, or let the 2a implementer's Task 0 commit them on the 2a branch as in Phase 1):**
+  - modified: `memory.md`, `CLAUDE.md` (status banner, handoff number), `docs/planning-handoff.md` (§0/§1/§5), `docs/adr/README.md`
+  - new: `docs/adr/0012`–`0018`, `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`, `handoff-prompts/orchestrator-handoff-3.md`
+- `.env` files exist locally only and are gitignored. The local dev DB was reset during the fix-up round (`make db-reset && make migrate`).
 - **Machine:** all prerequisites in `docs/setup-prerequisites.md` are installed and verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
 
 ## 4. Open questions and next steps
 
-1. **Owner:** resolve the GitHub account billing lock, then re-run CI (`gh run rerun 42547257090`, or push a commit) and confirm all three jobs (api, web, secrets) go green. Until then CI is unverified.
-2. **Orchestrator:** re-review the fix-up commits (`f361004..HEAD`) and the draft PR against `docs/implementation-plan.md`, the spec, and the ADRs; triage the deferred minors above; report to the owner.
-3. **Owner:** merge the PR (only the owner merges).
-4. **Then:** Phase 2 planning (decisions listed in the plan's Phase 2 outline: LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling, job queue, file storage, MVP scope).
+1. **Next orchestrator session (#4, `handoff-prompts/orchestrator-handoff-3.md`):** write the **Phase 2a implementation plan** from the approved design, in the Phase 1 plan format (Global Constraints, Review Focus, tasks with Files/Interfaces/failing tests/steps/commit), plus the implementer kickoff `handoff-prompts/implementer-phase-2a.md`. Owner approves the plan, then runs a Sonnet implementer on branch `phase-2a-foundations`.
+2. The Phase 1 leftovers are already folded into the 2a design §7.9.
+3. Phase 2 decision areas (2a done; 2b/2c open) (decisions listed in the plan's Phase 2 outline: LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling, job queue, file storage, MVP scope).
 
 **Caveats**
 - Library versions are not pinned in the plan by design; the lockfiles (`api/uv.lock`, `web/package-lock.json`) record what was installed.

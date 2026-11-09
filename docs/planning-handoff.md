@@ -86,6 +86,13 @@ Full scoring robustness (§2.6–2.9), calibration and bake-off (§2.9, §3.1), 
 | Embeddings | **Local model** (follows from 0001); exact model open (P2). |
 | LLM provider / voice | **Research done (§3). Owner decision pending** (provider P2, voice P3). |
 | Pricing | **Draft only (§4b).** Not part of the MVP, but usage logging is. |
+| MVP scope / Phase 2 split | **Decided (2026-11-09):** §0 scope as written; split into 2a/2b/2c branches ([0012](adr/0012-mvp-scope-and-phase-2-split.md)). |
+| Age policy | **Decided:** 13+ neutral age screen, no birth date stored ([0013](adr/0013-age-policy.md)). EU 13–15 and policy wording are launch-time questions. |
+| UI styling | **Decided:** Tailwind CSS + shadcn/ui, central theme tokens ([0014](adr/0014-ui-styling.md)). |
+| Job queue library | **Decided:** own `jobs` table + worker ([0015](adr/0015-job-queue-own-table.md)). |
+| File storage | **Decided:** local disk behind `FileStore`; 20 MB / 200 pages / text PDFs only ([0016](adr/0016-file-storage.md)). |
+| Auth details | **Decided:** 12-char min, HIBP, Postgres rate limits, CSRF token, hashed sessions ([0017](adr/0017-auth-security-details.md)). |
+| Content model / PDF library | **Decided:** one PDF per set; pypdfium2 in the worker ([0018](adr/0018-study-content-model-and-pdf-library.md)). |
 | Old "Illumina" DB name | Irrelevant; drop it. |
 
 ---
@@ -440,7 +447,7 @@ Present each with options, trade-offs and a recommendation before implementation
 **Phase tags:** P1 = must be decided in Phase 1 (architecture). P2 = needed for the MVP. P3 = can wait.
 
 - **P1: all decided 2026-11-08/09**, see ADRs 0001–0011 and §1. (#4: local embeddings, model TBD in P2. #5: auth decided; Postgres host deferred to deployment.)
-- **P2:** #2 LLM provider (one for the MVP), #6 scoring parameters (MVP subset), #7 privacy basics (age policy, data retention), #8 MVP scope confirmation
+- **P2:** #8 MVP scope **decided** (ADR 0012); #7 age policy **decided** (ADR 0013), provider data retention still open (with #2). **Still open:** #2 LLM provider (one for the MVP; needed for Phase 2b), #6 scoring parameters (MVP subset; needed for 2c), embedding model (2c)
 - **P3:** #3 voice, #10 pricing and billing
 
 1. **Stack:** FastAPI + Vite/React (TS) vs. full-stack TypeScript.

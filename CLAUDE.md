@@ -2,7 +2,7 @@
 
 Guidance for Claude Code sessions in this repository. It describes what the repo **currently is**, not what it is meant to become. The product vision is covered separately below so the two don't get mixed up.
 
-> **Status (2026-11-09):** **Phase 1 (architecture foundation) is complete on branch `phase-1-foundation`, pending the owner's review and merge.** It is a skeleton only: a FastAPI app with `GET /health`, a Postgres schema (`users`, `auth_identities`), a Vite React TS status page, the LLM/embedder interfaces with fakes, and tooling/CI. There are **no product features yet** (no auth endpoints, flashcards, PDF upload, or scoring). Phase 2 (MVP) has not been planned in detail; see the outline at the end of `docs/implementation-plan.md` (marked NOT FOR EXECUTION). Read `memory.md` next. CI has been written but is **unverified** (see `memory.md`).
+> **Status (2026-11-09):** **Phase 1 (architecture foundation) is complete and merged to `main` (PR #1, 2026-11-09; CI green).** It is a skeleton only: a FastAPI app with `GET /health`, a Postgres schema (`users`, `auth_identities`), a Vite React TS status page, the LLM/embedder interfaces with fakes, and tooling/CI. There are **no product features yet** (no auth endpoints, flashcards, PDF upload, or scoring). Phase 2 (MVP) is split into 2a/2b/2c (ADR 0012). **2a (auth, study sets/cards, PDF upload + job queue) is decided (ADRs 0012–0018) and its design is approved** (`docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`); its task plan is the next step. Read `memory.md` next.
 >
 > The Jan-2025 prototype is in git history at `5aba556`.
 
@@ -49,7 +49,7 @@ feynman-flashcard/
 │   ├── implementation-plan.md    Phase 1 plan (Tasks 0-9) + Phase 2 outline (NOT FOR EXECUTION)
 │   ├── planning-handoff.md       Roadmap (§0), decisions (§1), scoring design (§2), research, costs, open decisions (§5)
 │   └── setup-prerequisites.md    Machine setup (WSL, Docker, uv, Node, gh, gitleaks)
-├── handoff-prompts/              Numbered orchestrator handoffs + implementer-phase-1.md
+├── handoff-prompts/              Numbered orchestrator handoffs (latest: #3) + implementer kickoffs (implementer-phase-1*.md)
 ├── .claude/                      settings.json (handoff hooks), hooks/handoff-check.py, skills/handoff/SKILL.md
 ├── .github/workflows/ci.yml      Jobs: api, web, secrets
 ├── .gitignore / .gitattributes   Ignore rules (.env, .superpowers/, generated files); line-ending rules
@@ -167,7 +167,7 @@ Local results at the end of Phase 1: 36 pytest tests and 7 vitest tests pass; `m
 
 ## Notes for future sessions
 
-- The Phase 1 code is the approved foundation, pending the owner's review and merge. Next: orchestrator review of the draft PR → owner merges → Phase 2 (MVP) planning toward the vision above (tutor agent, scoring, feedback, PDF-to-flashcards).
+- The Phase 1 code is the approved, merged foundation. Next: the Phase 2a implementation plan (from the approved 2a design), then 2b/2c decisions and plans toward the vision above (tutor agent, scoring, feedback, PDF-to-flashcards).
 - **Start with [`docs/planning-handoff.md`](docs/planning-handoff.md).** It holds the detailed multi-stage scoring design, the provider, voice, embedding, and Postgres research with pricing, per-session cost estimates, and the list of open decisions for the owner.
 
 ### Phase order (decided)
