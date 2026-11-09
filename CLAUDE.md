@@ -154,7 +154,7 @@ make db-reset                   # DELETES the local DB volume and re-creates it
 make db-psql                    # psql as feynman_migrator
 ```
 
-Local results at the end of Phase 2a (`32b5327`): **235 pytest and 98 vitest tests pass; `make check` passes; gitleaks clean.** CI on the 2a branch: see the PR.
+Local results at the end of Phase 2a (`32b5327`): **235 pytest and 98 vitest tests pass; `make check` passes; gitleaks clean.** CI on the 2a branch: green (PR #2).
 
 ### Gotchas
 - **The worker must be running** (`make worker`) or uploaded PDFs stay `processing` until the UI's 10-minute polling gives up. It processes one job at a time with a lease (`JOB_LEASE_SECONDS`); handlers must be idempotent on reclaim.

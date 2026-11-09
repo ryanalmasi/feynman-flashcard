@@ -184,7 +184,7 @@ Model: Sonnet 5.5 implementers and reviewers under a controller (subagent-driven
 | Final review fixes | `32b5327` | lone-surrogate password no longer 500s; bulk delete scoped by `user_id`; SQL params hidden from logs |
 | 15 docs | this commit | README, CLAUDE.md, memory.md, planning-handoff |
 
-**Verification:** at `32b5327`, `make check` passes with **235 pytest and 98 vitest** tests; `gitleaks git --redact -v .` clean. **CI: pending (filled in after push).** Baseline after Task 0 was 40 pytest / 8 vitest.
+**Verification:** at `32b5327`, `make check` passes with **235 pytest and 98 vitest** tests; `gitleaks git --redact -v .` clean. **CI: green, run https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42573176896 (at `c1d8e42`).** Baseline after Task 0 was 40 pytest / 8 vitest.
 
 **Final whole-branch review (Opus):** no Critical findings; one Important (a lone UTF-16 surrogate in a register password caused a 500 via the argon2/HIBP encode), fixed in `32b5327` together with the bulk-delete `user_id` predicate and `hide_parameters=True`. The controller read that 4-file diff itself rather than dispatching a re-review (small, mechanical, suite green).
 
@@ -225,7 +225,7 @@ Per-task deferred minors (compact):
 ## 3. Repository state
 
 - **Path:** `~/code/feynman-flashcard`. **Branch:** `phase-2a-foundations` (from `main` at `3185eb1`, the Phase 1 squash merge). `main` itself has no 2a code until the owner merges.
-- **PR #1** (Phase 1): merged, CI green (runs 42547339617 and, on `main`, 42548513765). **Phase 2a draft PR:** opened by the controller after this docs commit (URL to be added by the controller). CI for the 2a branch: pending (filled in after push).
+- **PR #1** (Phase 1): merged, CI green (runs 42547339617 and, on `main`, 42548513765). **Phase 2a draft PR:** draft PR #2 https://github.com/ryanalmasi/feynman-flashcard/pull/2. CI for the 2a branch: green, run https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42573176896.
 - **Working tree after this commit:** clean (docs only). `.env` files exist locally and are gitignored; `.superpowers/` is gitignored scratch.
 - **Machine:** all prerequisites in `docs/setup-prerequisites.md` are installed and verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
 
