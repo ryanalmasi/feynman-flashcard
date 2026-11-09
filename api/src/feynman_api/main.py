@@ -7,13 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from feynman_api.config import Settings
 from feynman_api.db import create_engine, create_sessionmaker
-from feynman_api.errors import register_error_handlers
+from feynman_api.errors import ServerErrorJSONMiddleware, register_error_handlers
 from feynman_api.routes.health import router as health_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     logging.basicConfig(level=settings.log_level)
+    logging.getLogger().setLevel(settings.log_level)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -27,12 +28,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Feynman Flashcard API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
+    # Last added is outermost: CORS wraps the 500 middleware so 500s carry CORS headers.
+    app.add_middleware(ServerErrorJSONMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "X-CSRF-Token"],
+        expose_headers=["Retry-After"],
     )
     register_error_handlers(app)
     app.include_router(health_router)

@@ -6,6 +6,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.requests import Request as StarletteRequest
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +47,40 @@ def register_error_handlers(app: FastAPI) -> None:
         details = [{"loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()]
         return _response(422, "validation_error", "Request validation failed", details)
 
-    @app.exception_handler(Exception)
-    async def unhandled_handler(request: Request, exc: Exception) -> JSONResponse:
-        logger.error(
-            "Unhandled exception on %s %s",
-            request.method,
-            request.url.path,
-            exc_info=(type(exc), exc, exc.__traceback__),
-        )
-        return _response(500, "internal_error", "Internal server error")
+
+class ServerErrorJSONMiddleware:
+    """Pure ASGI: turns an unhandled exception into the standard JSON 500.
+
+    Sits inside CORSMiddleware so the 500 carries CORS headers. Re-raises if the
+    response has already started.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        started = False
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        except Exception as exc:
+            if started:
+                raise
+            request = StarletteRequest(scope)
+            logger.error(
+                "Unhandled exception on %s %s",
+                request.method,
+                request.url.path,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+            response = _response(500, "internal_error", "Internal server error")
+            await response(scope, receive, send)

@@ -14,6 +14,9 @@ if [[ ! -f "$INFRA" ]]; then
     printf 'POSTGRES_PASSWORD=%s\nMIGRATOR_PASSWORD=%s\nAPP_PASSWORD=%s\n' "$(gen)" "$(gen)" "$(gen)" > "$INFRA"
   )
   echo "created infra/.env"
+  if [[ -f "$API" ]]; then
+    echo "WARNING: created infra/.env but api/.env already exists; its passwords will not match. Delete api/.env and run make env again." >&2
+  fi
 fi
 
 if [[ ! -f "$API" ]]; then
@@ -31,9 +34,13 @@ if [[ ! -f "$API" ]]; then
       echo "TEST_MIGRATION_DATABASE_URL=postgresql+asyncpg://feynman_migrator:${MIG}@${H}/feynman_test"
       echo 'CORS_ORIGINS=["http://localhost:5173"]'
       echo "LOG_LEVEL=INFO"
+      echo "SESSION_COOKIE_SECURE=false"
     } > "$API"
   )
   echo "created api/.env"
+elif ! grep -qE '^SESSION_COOKIE_SECURE=' "$API"; then
+  printf 'SESSION_COOKIE_SECURE=false\n' >> "$API"
+  echo "added SESSION_COOKIE_SECURE=false to api/.env"
 fi
 
 if [[ ! -f "$WEB" ]]; then
