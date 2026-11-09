@@ -1,11 +1,15 @@
+import asyncio
 import time
 
 import httpx
+import pytest
 from asgi_lifespan import LifespanManager
 from pydantic import SecretStr
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from feynman_api.config import Settings
 from feynman_api.main import create_app
+from feynman_api.routes import health
 
 
 async def test_health_ok(api_client: httpx.AsyncClient) -> None:
@@ -32,6 +36,26 @@ async def test_health_db_down_returns_503_fast(test_settings: Settings) -> None:
     assert elapsed < 3.0
     assert "127.0.0.1" not in r.text
     assert "pw" not in r.text
+
+
+async def test_health_db_timeout_returns_503(
+    test_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def hanging_probe(engine: AsyncEngine) -> None:
+        await asyncio.sleep(5)
+
+    monkeypatch.setattr(health, "_probe", hanging_probe)
+    settings = test_settings.model_copy(update={"health_db_timeout_seconds": 0.1})
+    app = create_app(settings)
+    async with LifespanManager(app):
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            t0 = time.monotonic()
+            r = await client.get("/health")
+            elapsed = time.monotonic() - t0
+    assert r.status_code == 503
+    assert r.json() == {"status": "degraded", "db": "error", "version": "0.1.0"}
+    assert elapsed < 1.0
 
 
 async def test_app_starts_without_db(test_settings: Settings) -> None:
