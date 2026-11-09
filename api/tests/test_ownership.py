@@ -7,6 +7,9 @@ import httpx
 import pytest
 from conftest import auth_headers, walk_routes
 from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from feynman_api.models import Document
 
 pytestmark = pytest.mark.usefixtures("clean_db")
 
@@ -37,22 +40,33 @@ OWNED_ENDPOINTS: list[OwnedEndpoint] = [
     ),
     ("PATCH", "/flashcards/{card_id}", lambda i: f"/flashcards/{i.card_id}", {"front": "hacked"}),
     ("DELETE", "/flashcards/{card_id}", lambda i: f"/flashcards/{i.card_id}", None),
+    ("GET", "/documents/{document_id}", lambda i: f"/documents/{i.document_id}", None),
 ]
 
 
-async def _seed(client: httpx.AsyncClient) -> Ids:
+async def _seed(client: httpx.AsyncClient, db: AsyncSession) -> Ids:
     h = await auth_headers(client)
     s = await client.post("/study-sets", json={"title": "Mine"}, headers=h)
     c = await client.post(
         f"/study-sets/{s.json()['id']}/flashcards", json={"front": "f", "back": "b"}, headers=h
     )
-    return Ids(set_id=uuid.UUID(s.json()["id"]), card_id=uuid.UUID(c.json()["id"]))
+    set_id = uuid.UUID(s.json()["id"])
+    doc = Document(
+        study_set_id=set_id,
+        storage_key=uuid.uuid4().hex,
+        original_filename="a.pdf",
+        size_bytes=1,
+        status="processing",
+    )
+    db.add(doc)
+    await db.commit()
+    return Ids(set_id=set_id, card_id=uuid.UUID(c.json()["id"]), document_id=doc.id)
 
 
 async def test_ownership_matrix(
-    user_client: httpx.AsyncClient, other_user_client: httpx.AsyncClient
+    user_client: httpx.AsyncClient, other_user_client: httpx.AsyncClient, db: AsyncSession
 ) -> None:
-    ids = await _seed(user_client)
+    ids = await _seed(user_client, db)
     before_set = (await user_client.get(f"/study-sets/{ids.set_id}")).json()
     before_cards = (await user_client.get(f"/study-sets/{ids.set_id}/flashcards")).json()
     random_ids = Ids(set_id=uuid.uuid4(), card_id=uuid.uuid4(), document_id=uuid.uuid4())
@@ -64,6 +78,7 @@ async def test_ownership_matrix(
         assert mine.json()["error"]["code"] == "not_found", (method, path)
         assert mine.content == rand.content, (method, path)
     assert (await user_client.get(f"/study-sets/{ids.set_id}")).json() == before_set
+    assert before_set["document"] is not None  # the set under attack carries a document
     assert (await user_client.get(f"/study-sets/{ids.set_id}/flashcards")).json() == before_cards
 
 
@@ -79,8 +94,8 @@ async def test_ownership_matrix_covers_every_id_route(app: FastAPI) -> None:
 
 
 async def test_list_sets_shows_only_own(
-    user_client: httpx.AsyncClient, other_user_client: httpx.AsyncClient
+    user_client: httpx.AsyncClient, other_user_client: httpx.AsyncClient, db: AsyncSession
 ) -> None:
-    await _seed(user_client)
+    await _seed(user_client, db)
     assert (await other_user_client.get("/study-sets")).json() == []
     assert len((await user_client.get("/study-sets")).json()) == 1

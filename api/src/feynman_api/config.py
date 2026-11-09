@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     job_lease_seconds: int = 300
     job_poll_interval_seconds: float = 1.0
     job_backoff_base_seconds: float = 10.0
+    max_upload_bytes: int = 20 * 1024 * 1024
+    upload_multipart_allowance_bytes: int = 64 * 1024
 
 
 class MigrationSettings(BaseSettings):

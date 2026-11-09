@@ -85,3 +85,17 @@ class FlashcardUpdate(BaseModel):
                 raise ValueError(f"{name} must not be null")
             _reject_blank(value)
         return self
+
+
+class DocumentOut(BaseModel):
+    id: uuid.UUID
+    study_set_id: uuid.UUID
+    status: Literal["processing", "ready", "failed"]
+    page_count: int | None
+    error_message: str | None
+    original_filename: str
+
+
+class UploadOut(BaseModel):
+    study_set: StudySetOut
+    document: DocumentOut

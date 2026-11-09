@@ -12,10 +12,12 @@ from feynman_api.config import Settings
 from feynman_api.db import create_engine, create_sessionmaker
 from feynman_api.errors import ServerErrorJSONMiddleware, register_error_handlers
 from feynman_api.routes.auth import router as auth_router
+from feynman_api.routes.documents import router as documents_router
 from feynman_api.routes.flashcards import router as flashcards_router
 from feynman_api.routes.health import router as health_router
 from feynman_api.routes.study_sets import router as study_sets_router
 from feynman_api.storage import FileStore, LocalFileStore
+from feynman_api.upload_limit import BodySizeLimitMiddleware
 
 
 def create_app(
@@ -61,6 +63,12 @@ def create_app(
     if breach_checker is not None:
         app.state.breach_checker = breach_checker
     # Last added is outermost: CORS wraps the 500 middleware so 500s carry CORS headers.
+    # The body-size cap is added first, so it is innermost and its 413 still gets CORS headers.
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        path="/documents",
+        max_bytes=settings.max_upload_bytes + settings.upload_multipart_allowance_bytes,
+    )
     app.add_middleware(ServerErrorJSONMiddleware)
     app.add_middleware(
         CORSMiddleware,
@@ -75,4 +83,5 @@ def create_app(
     app.include_router(auth_router)
     app.include_router(study_sets_router)
     app.include_router(flashcards_router)
+    app.include_router(documents_router)
     return app

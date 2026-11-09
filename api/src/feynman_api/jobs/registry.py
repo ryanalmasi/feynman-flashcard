@@ -25,9 +25,13 @@ class WorkerContext:
 
 
 class JobHandler(Protocol):
-    async def run(
-        self, db: AsyncSession, job: Job, ctx: WorkerContext
-    ) -> dict[str, Any] | None: ...
+    async def run(self, db: AsyncSession, job: Job, ctx: WorkerContext) -> dict[str, Any] | None:
+        """Do the work.
+
+        The Job passed in is detached from any session: attribute changes on it are not
+        persisted, so handlers must re-select any rows they modify.
+        """
+        ...
 
     async def on_failed(self, db: AsyncSession, job: Job, user_message: str) -> None: ...
 
