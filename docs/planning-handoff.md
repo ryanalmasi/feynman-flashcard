@@ -75,10 +75,10 @@ Full scoring robustness (§2.6–2.9), calibration and bake-off (§2.9, §3.1), 
 | Phase order | **Decided:** refactor/restructure → MVP → improvements (§0). |
 | Stack | **Decided (2026-11-08):** FastAPI / Python 3.13 ([ADR 0001](adr/0001-backend-fastapi.md)) + Vite React TS ([0002](adr/0002-frontend-vite-react-ts.md)); layout `api/ web/ infra/ docs/` ([0003](adr/0003-repo-layout.md)). |
 | Database | **Decided:** Postgres 18, SQLAlchemy 2 async + Alembic, migrator/app least-privilege roles ([0004](adr/0004-database-migrations-roles.md)). Host decided at deployment (Phase 3). |
-| Auth | **Decided:** own Postgres sessions; email+password in MVP, Google sign-in next ([0005](adr/0005-auth.md)). |
+| Auth | **Decided and built in 2a:** own Postgres sessions; email+password in MVP, Google sign-in next ([0005](adr/0005-auth.md)). |
 | Config / secrets | **Decided** ([0006](adr/0006-config-secrets.md)). |
 | LLM abstraction | **Decided:** own thin interface ([0007](adr/0007-llm-provider-abstraction.md)). **Provider choice still open (P2).** |
-| Background jobs | **Decided:** Postgres queue + worker, built in Phase 2 ([0008](adr/0008-background-jobs.md)). |
+| Background jobs | **Decided; built in 2a** as an own `jobs` table + worker ([0008](adr/0008-background-jobs.md), [0015](adr/0015-job-queue-own-table.md)). |
 | Tooling / CI | **Decided** ([0009](adr/0009-testing-lint-ci.md)). |
 | Old code | **Decided and done:** clean restart, kept the 7 images; the prototype is in git history at `5aba556` ([0010](adr/0010-old-prototype-code.md)). |
 | Git workflow | **Decided:** pushed phase branches, draft PR, owner merges ([0011](adr/0011-git-workflow.md)). |
@@ -93,6 +93,7 @@ Full scoring robustness (§2.6–2.9), calibration and bake-off (§2.9, §3.1), 
 | File storage | **Decided:** local disk behind `FileStore`; 20 MB / 200 pages / text PDFs only ([0016](adr/0016-file-storage.md)). |
 | Auth details | **Decided:** 12-char min, HIBP, Postgres rate limits, CSRF token, hashed sessions ([0017](adr/0017-auth-security-details.md)). |
 | Content model / PDF library | **Decided:** one PDF per set; pypdfium2 in the worker ([0018](adr/0018-study-content-model-and-pdf-library.md)). |
+| Phase 2a status | **Built on branch `phase-2a-foundations`, on a draft PR pending owner merge (2026-11-09):** accounts, study sets/cards, review, PDF upload and extraction. Deferred review items are listed in `memory.md`. 2b (LLM provider, Knowledge Map, generated cards) is next and starts with a decision round. |
 | Old "Illumina" DB name | Irrelevant; drop it. |
 
 ---
@@ -447,7 +448,7 @@ Present each with options, trade-offs and a recommendation before implementation
 **Phase tags:** P1 = must be decided in Phase 1 (architecture). P2 = needed for the MVP. P3 = can wait.
 
 - **P1: all decided 2026-11-08/09**, see ADRs 0001–0011 and §1. (#4: local embeddings, model TBD in P2. #5: auth decided; Postgres host deferred to deployment.)
-- **P2:** #8 MVP scope **decided** (ADR 0012); #7 age policy **decided** (ADR 0013), provider data retention still open (with #2). **Still open:** #2 LLM provider (one for the MVP; needed for Phase 2b), #6 scoring parameters (MVP subset; needed for 2c), embedding model (2c)
+- **P2 (2a built, pending merge):** #8 MVP scope **decided** (ADR 0012); #7 age policy **decided** (ADR 0013), provider data retention still open (with #2). **Still open:** #2 LLM provider (one for the MVP; needed for Phase 2b), #6 scoring parameters (MVP subset; needed for 2c), embedding model (2c)
 - **P3:** #3 voice, #10 pricing and billing
 
 1. **Stack:** FastAPI + Vite/React (TS) vs. full-stack TypeScript.

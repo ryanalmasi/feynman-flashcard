@@ -4,8 +4,7 @@
 > **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
-**Last updated:** 2026-11-09 (Phase 1 merged with CI green; Phase 2 decided through 2a: ADRs 0012–0018 and the approved 2a design. Next: write the 2a plan)
-**Phase 2a implementation in progress (see the Phase 2a entry in §2; resume prompt `handoff-prompts/implementer-phase-2a-resume-1.md`).**
+**Last updated:** 2026-11-09 (Phase 2a implemented on `phase-2a-foundations`, final review fixes in `32b5327`; draft PR pending orchestrator review and the owner's merge)
 **Latest handoff written:** #3 (`handoff-prompts/orchestrator-handoff-3.md`), plus the implementer kickoffs `handoff-prompts/implementer-phase-1.md` and `implementer-phase-1-fixups.md`
 
 ---
@@ -13,8 +12,8 @@
 ## 1. Project snapshot
 
 - **What it is:** a study tool built around the Feynman technique: the student teaches a topic to an AI, gets a multi-stage score and feedback, and reviews AI-generated flashcards built from their PDF or topic.
-- **What exists in code today:** the Phase 1 foundation, merged to `main` (`3185eb1`): FastAPI app with `GET /health`, Postgres 18 in Docker with migrator/app roles, migration `0001_users` (`users`, `auth_identities`), LLM/embedder interfaces with fakes and contract tests, a Vite React TS status page with a generated typed API client, `make` targets, pre-commit + gitleaks, and a GitHub Actions workflow (green). No product features yet. `CLAUDE.md` and `README.md` describe this structure; the Jan-2025 prototype is in git history at `5aba556`.
-- **Current phase:** **Phase 1 complete and merged (2026-11-09). Phase 2 (MVP) is split into 2a/2b/2c (ADR 0012). 2a's decisions are made and its design is approved; its task plan is not written yet.** Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
+- **What exists in code today:** the Phase 1 foundation, merged to `main` (`3185eb1`): FastAPI app with `GET /health`, Postgres 18 in Docker with migrator/app roles, migration `0001_users` (`users`, `auth_identities`), LLM/embedder interfaces with fakes and contract tests, a Vite React TS status page with a generated typed API client, `make` targets, pre-commit + gitleaks, and a GitHub Actions workflow (green). `CLAUDE.md` and `README.md` describe the current structure (including the Phase 2a additions on the 2a branch); the Jan-2025 prototype is in git history at `5aba556`.
+- **Current phase:** **Phase 1 merged (2026-11-09). Phase 2a is implemented on `phase-2a-foundations` (accounts, sets/cards, review, PDF upload + job queue + extraction), on a draft PR pending review and the owner's merge. Phase 2 (MVP) is split into 2a/2b/2c (ADR 0012); 2b needs a decision round first.** Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
 - **Repo location (changed in session 2):** `~/code/feynman-flashcard` (WSL Linux filesystem). The old copy at `/mnt/c/Users/ryana/Documents/Github/feynman-flashcard` is **stale** and should be renamed or deleted. Don't work there.
 
 ## 2. Session log
@@ -160,56 +159,81 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 - T7: stray blank line in `index.html`; no unmount test; `typescript ~5.9` in package.json (lockfile pins exact).
 - T8: ~~`push: phase-*` plus `pull_request` double-runs~~ (resolved, `3347220`); redundant `uv python install`; implicit `npm ci` dependency for `gen-types` in the web job.
 
-### Implementation run: Phase 2a, IN PROGRESS (2026-11-09)
+### Implementation run: Phase 2a (2026-11-09)
+Model: Sonnet 5.5 implementers and reviewers under a controller (subagent-driven development), plus a final whole-branch review by Opus. Plan: `docs/implementation-plan-phase-2a.md` (Tasks 0-15). Branch `phase-2a-foundations` from `main` at `3185eb1`. The controller's ledger and per-task briefs are in the gitignored `.superpowers/sdd/implementation-plan-phase-2a/` (local only); this entry is the durable summary.
 
-Implementer session 1 (Sonnet 5.5, subagent-driven-development; controller + per-task implementer + reviewer). Branch `phase-2a-foundations`, pushed. **Tasks 0-13 are complete and reviewed; Task 14 is implemented (`a04be21`) but NOT yet reviewed; Task 14 step 5 (the owner's browser check) and Task 15 remain.** The full ledger and per-task briefs/reports/review diffs are in the gitignored `.superpowers/sdd/implementation-plan-phase-2a/` (`progress.md`); it survives on this machine, but the table below is the durable summary.
-
+**Commits per task** (every task had a spec/quality review; fix rounds in italics)
 | Task | Commit(s) | Notes |
 |---|---|---|
-| 0 docs | `370d54a` | plan line with a literal test password replaced by a runtime-generated SENTINEL (gitleaks flagged it; no config change) |
-| 1 leftovers | `5f42968` | |
-| 2 models/migrations | `f910470`, `655964c` | fix: CHECK names were doubled (op.f); exact-name test |
-| 3 FileStore | `e16b547`, `ffb9dc1` | fix: cancellation-safe put |
-| 4 passwords/HIBP | `756a003` | |
-| 5 sessions/rate limit/CSRF | `e415016`, `65b614d` | fix: error table codified in errors.py; framework 404 message `Not found.` |
-| 6 auth routes | `d9ad746`, `683aff0` | test hardening (age month term, matrix, NFKC, dummy verify) |
-| 7 study sets/cards | `af19f8e` | |
-| 8 job queue/worker | `f9dfc48`, `13bc840` | fix: failing on_failed no longer loops; lease-lost rollback pinned |
-| 9 upload | `e0c5359`, `bd1c86d` | fix: file kept after commit; filename Cf/control chars; NUL rejected in title/description/front/back |
-| 10 extract_pdf | `d7c6ca2`, `db541fd` | fix: NUL stripped from extracted text |
-| 11 web foundation | `eeeed18`, `d1504c9` | fix: safeNext tab/newline bypass; failed session check = signed out; class-based `dark` variant |
-| 12 login/register/account | `59b4b06`, `1b02676` | test hardening |
+| 0 docs | `370d54a` | ADRs 0012-0018, design, plan; plan line with a literal test password replaced by a runtime-generated sentinel (gitleaks flagged it; no config change) |
+| 1 leftovers | `5f42968` | CORS headers on 500s, CSRF header in CORS, logging force, migration test hardening, dev-env warning |
+| 2 models/migrations | `f910470`, *`655964c`* | fix: CHECK constraint names were doubled; exact-name test |
+| 3 FileStore | `e16b547`, *`ffb9dc1`* | fix: cancellation-safe `put` |
+| 4 passwords/HIBP | `756a003` | argon2id, fail-open range check |
+| 5 sessions/rate limit/CSRF | `e415016`, *`65b614d`* | fix: error table codified in `errors.py`; framework 404 message `Not found.`; session pruning |
+| 6 auth routes | `d9ad746`, *`683aff0`* | test hardening (age month term, CSRF matrix, NFKC, dummy verify) |
+| 7 study sets/cards | `af19f8e` | owner-scoped access |
+| 8 job queue/worker | `f9dfc48`, *`13bc840`* | fix: a failing `on_failed` no longer loops forever; lease-lost rollback pinned |
+| 9 upload | `e0c5359`, *`bd1c86d`* | fix: file kept after commit; filename Cf/control chars; NUL rejected in title/description/front/back |
+| 10 extract_pdf | `d7c6ca2`, *`db541fd`* | fix: NUL stripped from extracted text; pre-commit PDF exclude narrowed |
+| 11 web foundation | `eeeed18`, *`d1504c9`* | Tailwind + shadcn, tokens, CSRF client middleware, AuthProvider; fix: `safeNext` tab/newline bypass, failed session check = signed out, class-based dark variant |
+| 12 login/register/account | `59b4b06`, *`1b02676`* | neutral age screen; test hardening |
 | 13 sets/detail/review | `c978f67` | |
-| 14 upload + polling | `a04be21` | implemented, 98 vitest; review pending |
+| 14 upload + polling | `a04be21` | 10-minute polling cap |
+| progress record | `0309982` | docs: progress and resume prompt |
+| Final review fixes | `32b5327` | lone-surrogate password no longer 500s; bulk delete scoped by `user_id`; SQL params hidden from logs |
+| 15 docs | this commit | README, CLAUDE.md, memory.md, planning-handoff |
 
-Counts at `a04be21`: 233 pytest, 98 vitest (`make check` green, gitleaks clean). CI NOT yet checked on this branch (Task 15 step 2; zero-step billing failures mean stop and tell the owner).
+**Verification:** at `32b5327`, `make check` passes with **235 pytest and 98 vitest** tests; `gitleaks git --redact -v .` clean. **CI: pending (filled in after push).** Baseline after Task 0 was 40 pytest / 8 vitest.
 
-**Owner decisions to surface in the PR body (not changed by the implementer):**
-1. `DELETE /auth/account` has no rate limit on password attempts (as the plan specifies): a stolen session could brute-force the password and burn argon2 CPU. Recommend a per-user failure limit.
-2. FastAPI parses multipart before dependencies, so an unauthenticated caller can make the server spool up to ~20 MiB + 64 KiB to temp disk per request (gets 413, not 401). Bounded by `BodySizeLimitMiddleware`. Options: cookie-presence precheck in the middleware, or a reverse-proxy limit at deployment.
-3. If `on_failed` fails persistently, a document can stay `processing` (mildly conflicts with design 7.6; strictly better than the endless loop it replaced).
+**Final whole-branch review (Opus):** no Critical findings; one Important (a lone UTF-16 surrogate in a register password caused a 500 via the argon2/HIBP encode), fixed in `32b5327` together with the bulk-delete `user_id` predicate and `hide_parameters=True`. The controller read that 4-file diff itself rather than dispatching a re-review (small, mechanical, suite green).
 
-**Deviations for the PR body:** CSRF matrix and ownership meta-test enumerate routes via a shared `walk_routes` (FastAPI 0.162 hides included routers from `app.routes`); unknown-email logins also count toward the per-email limiter (consistent with design 7.8); birth_year range check lives in the route (needs the clock); NUL rejection added to study-set/card schemas and upload title; upload `title` Form validated by hand (strip, 1-120); pre-commit gets no PDF exclude (`.gitattributes` has `*.pdf binary`); `@custom-variant dark (&:is(.dark *))` added to `index.css` (no `.dark` block); `tsconfig.app.json` has `types: ["node"]` globally (needed by `tokens.test.ts`); `DocumentStatus` prop is `document` and SetDetailPage passes `key={document.id}`; the plan's Task 6 sentinel-password edit (above); Task 6 implementation was written before its tests (a test-hardening follow-up with mutation checks was added).
+**Owner's browser check (verbatim):** "tests pass. I faced an issue initially where I created an account and logged in, then when i logged out to log back in it said my account password was found online." Follow-up: "I dont remember the error code, not sure if one was ever shown in the form or UI". The controller's finding: the HIBP breach check exists only in `POST /auth/register` (login never calls it). The API log showed register 201, login 401 x3, register 422 x2, register 201, login 200, which reads as mistyped credentials followed by register-time `password_breached` rejections. Treated as that; **not reproduced as a bug**, so an undiagnosed login issue remains possible.
 
-**Deferred minors (final whole-branch review should triage):** see `progress.md`. Highlights: Task 13 review flip control lacks Enter activation/accessible name and modifier-key guard; a failed card delete does not reload; several web test gaps (set-edit PATCH body, refresh-after-mutation, load-error states); idle-expiry/rate-limit float window math; a duplicate `local json()` helper across web tests; no `pypdfium2` upper bound; no cap on extracted text size; free-text NUL handling in auth email/password not checked.
+**Owner decisions to confirm (not changed by the implementers):**
+1. Unauthenticated multipart requests to `/documents` make the server spool up to ~20 MiB + 64 KiB to temp disk before auth (FastAPI parses multipart before dependencies; the caller gets 413, not 401). Bounded by the middleware cap. Options: a cookie-presence precheck in the middleware, or a reverse-proxy limit at deployment.
+2. `DELETE /auth/account` has no attempt limit (a stolen session could brute-force the password and burn argon2 CPU, as the plan specified). A per-user failure limit is recommended.
+3. No cap on extracted PDF text size or extraction time.
+4. NUL characters are rejected in the study-set, card and upload-title schemas (approved by the controller).
+5. `on_failed` fallback deviates from design §7.6: if `on_failed` raises, the worker rolls back, logs, and commits `mark_failed` alone. A document can stay `processing` only if `on_failed` fails persistently; this is strictly better than the endless retry loop it replaced.
 
-**Where to resume:** see `handoff-prompts/implementer-phase-2a-resume-1.md`.
+**Deviations from the plan, with reasons**
+- Task 6: the CSRF matrix and ownership meta-test enumerate routes through a shared `walk_routes` over `app.openapi()` because FastAPI 0.162 hides included routers from `app.routes`; unknown-email logins also count toward the per-email limiter (consistent with design §7.8); the `birth_year` range check lives in the route, not the schema, because it needs the clock; the implementation was written before its tests (a test-hardening round with mutation checks followed).
+- Task 9: the upload `title` Form field is validated by hand (strip, 1-120).
+- Task 10: no PDF exclude in pre-commit (`.gitattributes` marks `*.pdf` binary), so a PDF-only commit is still scanned.
+- Task 11: `@custom-variant dark (&:is(.dark *))` added to `index.css` (shadcn convention, no `.dark` block); `tsconfig.app.json` has `types: ["node"]` globally (needed by `tokens.test.ts`).
+- Task 14: the `DocumentStatus` prop is named `document` (shadows the global; brief-mandated) and `SetDetailPage` passes `key={document.id}`.
+- Extra dependencies approved in the design: `email-validator`, `sonner`, `tw-animate-css`, `radix-ui` (not `next-themes`, `react-hook-form`, `zod`).
+
+**Incomplete / deferred (none block the PR)**
+Final reviewer's minors:
+- M1: no JSON body size cap on non-upload routes (a deployment or reverse-proxy limit is the intended answer).
+- M4: login lockout peek/hit race.
+- M5: a long row lock is held during PDF extraction.
+- M6: login 422 copy for emails like `a@b` shows "Request validation failed".
+- M7: a transient 5xx on `/auth/session` signs the user out.
+
+Per-task deferred minors (compact):
+- T1: log-level test could pre-set the root level. T2: bare `IntegrityError` in two tests; no `rate_limit_buckets` PK test. T3: chunks `aclose()` not called; double-cancel during the post-cancel wait; `close()` error masks the original.
+- T4: `test_nfkc_normalisation` partly vacuous; the 500 fail-open test does not check the log; HIBP hashes the un-normalised password. T5: float window math in `rate_limit._window`; a CSRF-failed request still touches the session; stale-delete on concurrent expiry.
+- T6: broad `IntegrityError` catch on register; registering while logged in leaves the old session valid; a test reaches `api_client._transport.app`. T7: count subquery groups over all flashcards; GET/PATCH set run two owner-scoped queries; a few 422/null-field test gaps.
+- T8: `basicConfig`+`setLevel` vs `force=True`; unknown job kind never calls `on_failed`; the test mixes host `datetime.now` with DB `now()`; only `OkHandler` is typechecked against the Protocol. T9: weak after-commit and declared-Content-Length tests; duplicate Content-Length handling; an ambiguous commit failure deletes the file (extract_pdf fails the document cleanly on a missing file).
+- T10: no upper bound on `pypdfium2`; concurrent reprocess untested. T11: global `types: ["node"]`; 401 handler on `/login` navigates to `/login?next=%2Flogin` (handled in T12).
+- T13: the review flip control lacks Enter activation/accessible name and a modifier-key guard; no state reset on `setId` change; a failed card delete does not reload; several test gaps (set-edit PATCH body, refresh-after-mutation, load-error states).
+- T14: an in-flight poll at the 10-minute mark is dropped; no abort/timeout on the poll GET; `useState(document)` ignores prop changes; a duplicate local `json()` test helper; 413/415 tests cannot distinguish the server message from the fixed string.
 
 ## 3. Repository state
 
-- **Path:** `~/code/feynman-flashcard`. **Branch:** `main` at `3185eb1` (squash merge of PR #1), pushed. `phase-1-foundation` still exists on `origin` (history of the per-task commits).
-- **PR #1:** https://github.com/ryanalmasi/feynman-flashcard/pull/1 — **merged** 2026-11-09. CI green (run 42547339617); post-merge CI on `main` (run 42548513765) also green.
-- **Uncommitted on `main` (orchestrator session 3; commit only when the owner asks, or let the 2a implementer's Task 0 commit them on the 2a branch as in Phase 1):**
-  - modified: `memory.md`, `CLAUDE.md` (status banner, handoff number), `docs/planning-handoff.md` (§0/§1/§5), `docs/adr/README.md`
-  - new: `docs/adr/0012`–`0018`, `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`, `handoff-prompts/orchestrator-handoff-3.md`
-- `.env` files exist locally only and are gitignored. The local dev DB was reset during the fix-up round (`make db-reset && make migrate`).
+- **Path:** `~/code/feynman-flashcard`. **Branch:** `phase-2a-foundations` (from `main` at `3185eb1`, the Phase 1 squash merge). `main` itself has no 2a code until the owner merges.
+- **PR #1** (Phase 1): merged, CI green (runs 42547339617 and, on `main`, 42548513765). **Phase 2a draft PR:** opened by the controller after this docs commit (URL to be added by the controller). CI for the 2a branch: pending (filled in after push).
+- **Working tree after this commit:** clean (docs only). `.env` files exist locally and are gitignored; `.superpowers/` is gitignored scratch.
 - **Machine:** all prerequisites in `docs/setup-prerequisites.md` are installed and verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
 
 ## 4. Open questions and next steps
 
-1. **Next orchestrator session (#4, `handoff-prompts/orchestrator-handoff-3.md`):** write the **Phase 2a implementation plan** from the approved design, in the Phase 1 plan format (Global Constraints, Review Focus, tasks with Files/Interfaces/failing tests/steps/commit), plus the implementer kickoff `handoff-prompts/implementer-phase-2a.md`. Owner approves the plan, then runs a Sonnet implementer on branch `phase-2a-foundations`.
-2. The Phase 1 leftovers are already folded into the 2a design §7.9.
-3. Phase 2 decision areas (2a done; 2b/2c open) (decisions listed in the plan's Phase 2 outline: LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling, job queue, file storage, MVP scope).
+1. **The orchestrator reviews the 2a draft PR** (Review Focus items, the owner decisions listed in the 2a entry, deviations). **The owner merges** (only the owner merges).
+2. **Then the 2b decision round** (own branch, draft PR, owner merge): LLM provider and models with prices re-verified, provider data-retention/training settings, Knowledge Map details, card count/style. Then 2c: embedding model, scoring parameters, tutor prompt and session limits, feedback format, usage-data retention. Launch-time: EU 13-15 users, ToS/privacy wording.
+3. Owner choices on the deferred items above (notably the unauthenticated multipart spooling and the missing `DELETE /auth/account` attempt limit), and whether the undiagnosed login report needs follow-up.
 
 **Caveats**
 - Library versions are not pinned in the plan by design; the lockfiles (`api/uv.lock`, `web/package-lock.json`) record what was installed.
