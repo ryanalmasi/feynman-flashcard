@@ -26,6 +26,18 @@ def _test_database_url() -> str:
     return _env("TEST_DATABASE_URL") or "postgresql+asyncpg://x:x@127.0.0.1:1/x"
 
 
+def _exception_chain(exc: BaseException) -> list[BaseException]:
+    """The exception plus its __cause__/__context__ ancestors (cycle-safe)."""
+    chain: list[BaseException] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    return chain
+
+
 def alembic_config() -> Config:
     return Config(str(API_DIR / "alembic.ini"))
 
@@ -74,10 +86,11 @@ def migrated_db(migration_url: str, alembic_cfg: Config) -> Iterator[None]:
             command.upgrade(alembic_cfg, "head")
         except Exception as exc:
             # Never include str(exc) or the URL: they may carry credentials.
+            chain = _exception_chain(exc)
             hint = DB_HINT
-            if isinstance(exc, asyncpg.InvalidPasswordError):
+            if any(isinstance(e, asyncpg.InvalidPasswordError) for e in chain):
                 hint += " Credentials rejected: run `make db-reset` (DELETES local DB data)."
-            pytest.fail(f"{hint} ({type(exc).__name__})", pytrace=False)
+            pytest.fail(f"{hint} ({type(chain[-1]).__name__})", pytrace=False)
         yield
     finally:
         if previous is None:
