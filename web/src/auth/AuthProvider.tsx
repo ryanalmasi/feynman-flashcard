@@ -51,7 +51,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUnauthenticatedHandler(() => {
       signedOut();
       const { pathname, search } = locationRef.current;
-      navigate("/login?next=" + encodeURIComponent(pathname + search));
+      // Already on an auth page: no `next` (it would point back at /login).
+      if (pathname === "/login") return;
+      if (pathname === "/register") navigate("/login");
+      else navigate("/login?next=" + encodeURIComponent(pathname + search));
     });
     return () => setUnauthenticatedHandler(null);
   }, [navigate, signedOut]);

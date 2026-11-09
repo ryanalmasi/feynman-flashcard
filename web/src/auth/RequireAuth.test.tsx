@@ -178,3 +178,17 @@ describe("useAuth", () => {
     spy.mockRestore();
   });
 });
+
+describe("unauthenticated handler on auth pages", () => {
+  it("a not_authenticated 401 while on /login does not add a next param", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => Promise.resolve(json(unauth, 401))),
+    );
+    setup("/login");
+    await screen.findByRole("heading", { name: "Login" });
+    await api.POST("/auth/logout");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId("where")).toHaveTextContent(/^\/login$/);
+  });
+});
