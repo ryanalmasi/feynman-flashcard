@@ -2,6 +2,7 @@ import os
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import asyncpg  # type: ignore[import-untyped]
 import httpx
@@ -200,3 +201,52 @@ async def db(clean_db: None, test_settings: Settings) -> AsyncIterator[AsyncSess
             yield session
     finally:
         await engine.dispose()
+
+
+ORIGIN = {"Origin": "http://localhost:5173"}
+
+
+async def register(
+    client: httpx.AsyncClient,
+    email: str = "a@example.com",
+    password: str = "a-long-passphrase",  # noqa: S107
+    **kw: Any,
+) -> httpx.Response:
+    body: dict[str, Any] = {
+        "email": email,
+        "password": password,
+        "birth_month": 1,
+        "birth_year": datetime.now(UTC).year - 20,
+    }
+    body.update(kw)
+    return await client.post("/auth/register", json=body, headers=ORIGIN)
+
+
+async def auth_headers(client: httpx.AsyncClient) -> dict[str, str]:
+    r = await client.get("/auth/session")
+    return ORIGIN | {"X-CSRF-Token": r.json()["csrf_token"]}
+
+
+async def _signed_in_client(app: FastAPI, email: str) -> AsyncIterator[httpx.AsyncClient]:
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await register(client, email=email)
+        assert r.status_code == 201
+        yield client
+
+
+@pytest.fixture
+async def user_client(
+    app: FastAPI, api_client: httpx.AsyncClient
+) -> AsyncIterator[httpx.AsyncClient]:
+    # api_client keeps the app lifespan running; this client has its own cookie jar.
+    async for client in _signed_in_client(app, "user@example.com"):
+        yield client
+
+
+@pytest.fixture
+async def other_user_client(
+    app: FastAPI, api_client: httpx.AsyncClient
+) -> AsyncIterator[httpx.AsyncClient]:
+    async for client in _signed_in_client(app, "other@example.com"):
+        yield client

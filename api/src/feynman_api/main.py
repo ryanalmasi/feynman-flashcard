@@ -11,6 +11,7 @@ from feynman_api.clock import Clock, system_clock
 from feynman_api.config import Settings
 from feynman_api.db import create_engine, create_sessionmaker
 from feynman_api.errors import ServerErrorJSONMiddleware, register_error_handlers
+from feynman_api.routes.auth import router as auth_router
 from feynman_api.routes.health import router as health_router
 from feynman_api.storage import FileStore, LocalFileStore
 
@@ -69,4 +70,5 @@ def create_app(
     )
     register_error_handlers(app)
     app.include_router(health_router)
+    app.include_router(auth_router)
     return app
