@@ -9,6 +9,7 @@ from alembic.config import Config
 from asgi_lifespan import LifespanManager
 from dotenv import dotenv_values
 from fastapi import FastAPI
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 
 from alembic import command
@@ -58,7 +59,7 @@ def test_settings() -> Settings:
 
 
 @pytest.fixture
-def app(test_settings: Settings) -> FastAPI:
+def app(migrated_db: None, test_settings: Settings) -> FastAPI:
     return create_app(test_settings)
 
 
@@ -127,5 +128,38 @@ async def app_connection(
     try:
         async with engine.connect() as conn:
             yield conn
+    finally:
+        await engine.dispose()
+
+
+async def _truncate(migration_url: str) -> None:
+    # Test-only use of the migrator: the app role has no TRUNCATE privilege.
+    engine = create_async_engine(migration_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("TRUNCATE users, jobs, rate_limit_buckets RESTART IDENTITY CASCADE")
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture
+async def clean_db(migrated_db: None, migration_url: str) -> AsyncIterator[None]:
+    """Empty the data tables before and after a test that commits data."""
+    await _truncate(migration_url)
+    try:
+        yield
+    finally:
+        await _truncate(migration_url)
+
+
+@pytest.fixture
+async def db(clean_db: None, test_settings: Settings) -> AsyncIterator[AsyncSession]:
+    """Plain feynman_app session (not rolled back), for setup rows and committed-state asserts."""
+    engine = create_async_engine(test_settings.database_url.get_secret_value())
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            yield session
     finally:
         await engine.dispose()

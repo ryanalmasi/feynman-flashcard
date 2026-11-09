@@ -17,6 +17,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(nullable=False)
     password_hash: Mapped[str | None] = mapped_column(nullable=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    age_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
