@@ -80,7 +80,7 @@ Full scoring robustness (§2.6–2.9), calibration and bake-off (§2.9, §3.1), 
 | LLM abstraction | **Decided:** own thin interface ([0007](adr/0007-llm-provider-abstraction.md)). **Provider choice still open (P2).** |
 | Background jobs | **Decided:** Postgres queue + worker, built in Phase 2 ([0008](adr/0008-background-jobs.md)). |
 | Tooling / CI | **Decided** ([0009](adr/0009-testing-lint-ci.md)). |
-| Old code | **Decided:** clean restart, keep images ([0010](adr/0010-old-prototype-code.md)). |
+| Old code | **Decided and done:** clean restart, kept the 7 images; the prototype is in git history at `5aba556` ([0010](adr/0010-old-prototype-code.md)). |
 | Git workflow | **Decided:** pushed phase branches, draft PR, owner merges ([0011](adr/0011-git-workflow.md)). |
 | Scoring | **Multi-stage:** an objective baseline plus AI-graded rubric scores, reconciled into a final score. Full design in §2; the MVP subset is in §0. Parameters open (P2). |
 | Embeddings | **Local model** (follows from 0001); exact model open (P2). |

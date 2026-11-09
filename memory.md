@@ -4,7 +4,7 @@
 > **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
-**Last updated:** 2026-11-09 (end of session 2, orchestrator / planning)
+**Last updated:** 2026-11-09 (Phase 1 implementation run complete; pending orchestrator review and owner merge)
 **Latest handoff written:** #2 (`handoff-prompts/orchestrator-handoff-2.md`), plus the implementer kickoff `handoff-prompts/implementer-phase-1.md`
 
 ---
@@ -12,8 +12,8 @@
 ## 1. Project snapshot
 
 - **What it is:** a study tool built around the Feynman technique: the student teaches a topic to an AI, gets a multi-stage score and feedback, and reviews AI-generated flashcards built from their PDF or topic.
-- **What exists in code today:** still only the old Jan-2025 prototype (Flask + MySQL + Redis + Create React App). **No new code has been written yet.** Details are in `CLAUDE.md`, which Phase 1 Task 9 will rewrite.
-- **Current phase:** **Phase 1 is planned and approved, and not yet started.** Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
+- **What exists in code today:** the Phase 1 foundation on branch `phase-1-foundation`: FastAPI app with `GET /health`, Postgres 18 in Docker with migrator/app roles, migration `0001_users` (`users`, `auth_identities`), LLM/embedder interfaces with fakes and contract tests, a Vite React TS status page with a generated typed API client, `make` targets, pre-commit + gitleaks, and a GitHub Actions workflow (unverified, see the session log). No product features yet. `CLAUDE.md` and `README.md` describe this structure; the Jan-2025 prototype is in git history at `5aba556`.
+- **Current phase:** **Phase 1 implemented, awaiting orchestrator review of the draft PR and the owner's merge.** Then Phase 2 planning. Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
 - **Repo location (changed in session 2):** `~/code/feynman-flashcard` (WSL Linux filesystem). The old copy at `/mnt/c/Users/ryana/Documents/Github/feynman-flashcard` is **stale** and should be renamed or deleted. Don't work there.
 
 ## 2. Session log
@@ -55,26 +55,70 @@ Machine and setup decisions: **Docker Engine inside WSL** (not Docker Desktop); 
 
 **Still open (Phase 2 decisions, see the plan's Phase 2 outline):** LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling approach, job-queue library, file storage, MVP scope confirmation. Phase 3: voice, pricing/billing.
 
+### Implementation run: Phase 1 (2026-11-09)
+Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subagent-driven development with a fresh reviewer per task. Plan: `docs/implementation-plan.md` Tasks 0-9.
+
+**Built (one commit per task, all pushed to `phase-1-foundation`)**
+- Task 0 (`e7bd5b9..7666f97`): prerequisites verified; planning docs, ADRs, spec committed.
+- Task 1 (`a9f9cd1`): prototype removed (kept 7 images), root `.gitignore`, `.gitattributes`, pre-commit config, gitleaks.
+- Task 2 (`bbc2a35`, fix `956c9b5`): Postgres 18 compose, least-privilege role init script, `scripts/dev-env.sh`, `make env/db/db-down/db-reset/db-psql`.
+- Task 3 (`0d0c255`): `Settings`, `create_app()`, JSON error shape and handlers, CORS.
+- Task 4 (`eccda9b`, fixes `61c6e68`, `747fc6b`): async DB layer, Alembic, `0001_users` migration, role/privilege and migration round-trip tests.
+- Task 5 (`374a451`): `GET /health` with a bounded DB probe.
+- Task 6 (`4882a94`): LLM provider and embedder Protocols, fakes, contract tests.
+- Task 7 (`814c9e4`, `d82c6f2`): Vite React TS skeleton, typed openapi-fetch client, status page, types drift check; switched oxlint to ESLint.
+- Task 8 (`5c32df1`, `3abaff5`): `make check` and GitHub Actions (api, web, secrets jobs).
+- Task 9: README and CLAUDE.md rewrite, this record.
+
+**Verification**
+- Locally: 36 pytest tests and 7 vitest tests pass; `make check` passes (lint, test, build, types drift).
+- **CI is NOT verified.** The workflow ran twice (run ids 42543755654 and 42543763849; https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42543763849) and all three jobs failed with zero steps executed: "The job was not started because your account is locked due to a billing issue." The workflow was only statically reviewed. Assumptions untested on a real runner: the gitleaks tarball install, the Postgres service container, and the roles script over TCP. **The owner must resolve the GitHub billing issue, then re-run CI** (`gh run rerun <id>` or push a commit).
+- Owner's manual check (Task 7 step 5): the owner opened http://localhost:5173 in the Windows browser and confirmed it shows "API: ok" and "Database: ok".
+
+**Deviations from the plan (all reviewed; none change an ADR)**
+- `.superpowers/` added to `.gitignore` (agent scratch workspace); root `.DS_Store` removed; README whitespace fix.
+- `pass_filenames: false` on the `gitleaks-system` pre-commit hook.
+- pre-commit revs: ruff-pre-commit bumped to v0.17.4 to match the version uv resolves (other hooks left at their earlier revs).
+- Compose healthcheck uses `pg_isready -h 127.0.0.1` (TCP) so the check cannot pass during the entrypoint's temporary init server.
+- The `make db` credential probe uses `-h db`, because loopback inside the container is trust-auth and would always succeed.
+- API: `hatchling` build backend added (src layout needs one); pytest `asyncio_default_fixture_loop_scope = "function"`; CORS `allow_methods` GET/POST/PUT/PATCH/DELETE and `allow_headers` Content-Type; explicit `uq_auth_identities_provider_subject` constraint name; DB role tests parametrized; conftest prints a `make db` / `make db-reset` hint for every unreachable-DB failure (including wrapped invalid-password errors); `asgi-lifespan` added as a test-only dev dependency (pre-approved).
+- LLM layer: `T` bound to `BaseModel` with `noqa UP046` on `Generic[T]`; `LLMRateLimitError` has keyword-only `retry_after` and a default message; the fake raises `LLMOutputValidationError` when it has no structured payloads and rejects `chunk_size`/`dimensions` < 1; a few extra tests.
+- Web: TypeScript pinned `~5.9` (openapi-typescript peer); a small `fetch` wrapper in `client.ts`; the implementer first used oxlint (vite template default), contradicting the plan and ADR 0009, so it was switched to ESLint flat config + `eslint-config-prettier` (`d82c6f2`).
+- `npm audit`: 10 moderate dev-only advisories (minimatch via eslint/typescript-eslint). The only fix is forcing an ESLint 9 downgrade, not applied.
+- CI action pins: `actions/checkout@v7`, `actions/setup-node@v7`, `astral-sh/setup-uv@v10.3.3` (no floating `v10` tag exists; fixed in `3abaff5`).
+- `docs/planning-handoff.md` §1: only the "Old code" row was touched (adds the `5aba556` pointer).
+
+**Incomplete**
+- CI green status (billing lock, above).
+- The draft PR is opened by the controller after the final whole-branch review.
+
+**Deferred minors (for the orchestrator to triage)**
+- T2: `make db` grep errors if `infra/.env` is missing (harmless); `db-psql` relies on socket trust; `api/.env.example` CORS_ORIGINS is unquoted JSON (fine for pydantic).
+- T3: `logging.basicConfig` is a no-op if the root logger has handlers (consider `force=True`); 500s from `ServerErrorMiddleware` carry no CORS headers (Starlette limitation); `conftest` imports python-dotenv, which is only a transitive dependency; the CSRF header must be added to `allow_headers` in Phase 2.
+- T4: `MIGRATION_DATABASE_URL` env var leaks (not restored) in conftest; `test_migrations` assumes serial DB use and has no `finally` on the last upgrade; dead logging sections in `alembic.ini`; `type: ignore` on `orig.__cause__` is brittle; `compare_metadata` may not fully cover the functional index `lower(email)` (unverified).
+- T5: the db-down test doesn't prove the 2s bound (port 1 refuses instantly); duplicated unreachable `Settings` in tests; `version()` is looked up per request.
+- T6: error-propagation test uses `pytest.raises(type(err))` (accepts subclasses); no tests for structured-payload cycling or the no-structured error path; `StructuredResult.value: T` may warn on dump.
+- T7: stray blank line in `index.html`; no unmount test; `typescript ~5.9` in package.json (lockfile pins exact).
+- T8: `push: phase-*` plus `pull_request` double-runs for a PR from a `phase-*` branch (per brief); redundant `uv python install`; implicit `npm ci` dependency for `gen-types` in the web job.
+
 ## 3. Repository state
 
-- **Path:** `~/code/feynman-flashcard`. **Branch:** `main` at `e7bd5b9`, which equals `origin/main` (pushed).
-- **Uncommitted (by design; the implementer's Task 0 commits them on `phase-1-foundation`):**
-  - new: `docs/adr/` (12 files), `docs/superpowers/specs/2026-11-08-phase-1-foundation-design.md`, `docs/implementation-plan.md`, `docs/setup-prerequisites.md`, `handoff-prompts/orchestrator-handoff-2.md`, `handoff-prompts/implementer-phase-1.md`
-  - modified: `memory.md`, `CLAUDE.md` (handoff number, repo path), `docs/planning-handoff.md` (§1, §5)
-- **Junk still tracked:** `.DS_Store`, `__pycache__/`, `flask_session/`. Removed by plan Task 1.
-- **Machine (checked 2026-11-09):** git, curl, and GitHub SSH (`ryanalmasi`) work. **Missing:** make, Docker, gh, uv/Python 3.13, Node 26, pre-commit, gitleaks. See `docs/setup-prerequisites.md` steps 1–6. `sudo` needs the owner's password, so steps 1–3 must be run by the owner.
+- **Path:** `~/code/feynman-flashcard`. **Branch:** `phase-1-foundation`, pushed to `origin`. `main` is unchanged at `e7bd5b9`.
+- **Draft PR:** (opened by the controller after the final review; see the PR list)
+- **Working tree:** clean after the Task 9 commit. `.superpowers/` (agent scratch) is gitignored. `.env` files exist locally only and are gitignored.
+- **Machine:** all prerequisites in `docs/setup-prerequisites.md` are installed and verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
 
 ## 4. Open questions and next steps
 
-1. **Owner:** finish `docs/setup-prerequisites.md` steps 1–6. Step 7 must print `ALL PREREQUISITES OK`. Rename or delete the stale `/mnt/c/...` copy.
-2. **Owner:** start a **Sonnet implementer** session in `~/code/feynman-flashcard` with `handoff-prompts/implementer-phase-1.md`. It runs `docs/implementation-plan.md` with subagent-driven development and ends by opening a draft PR.
-3. **Next orchestrator session** (`handoff-prompts/orchestrator-handoff-2.md`): review the draft PR against the plan, spec, and ADRs; report findings to the owner; the owner merges. Then plan Phase 2.
+1. **Owner:** resolve the GitHub account billing lock, then re-run CI (`gh run rerun 42543763849`, or push a commit) and confirm all three jobs (api, web, secrets) go green. Until then CI is unverified.
+2. **Orchestrator:** review the draft PR against `docs/implementation-plan.md`, the spec, and the ADRs; triage the deferred minors above; report to the owner.
+3. **Owner:** merge the PR (only the owner merges).
+4. **Then:** Phase 2 planning (decisions listed in the plan's Phase 2 outline: LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling, job queue, file storage, MVP scope).
 
 **Caveats**
-- Library versions in the plan aren't pinned by number on purpose (the latest stable at install time, locked by lockfiles). The pinned numbers (Python 3.13, Node 26, Postgres 18, gitleaks 8.30.1, nvm 0.41.0) were checked on 2026-11-09.
-- WSL → Windows-browser access to `localhost:5173` and `:8000` wasn't tested. Plan Task 7 step 5 asks the owner to check it.
-- The Postgres 18 image's volume layout (mount `/var/lib/postgresql`) comes from memory of the image change, so verify it during Task 2.
-- Third-party prices in `docs/planning-handoff.md` §3–4 are still unverified (see session 1).
+- Library versions are not pinned in the plan by design; the lockfiles (`api/uv.lock`, `web/package-lock.json`) record what was installed.
+- Third-party prices in `docs/planning-handoff.md` §3-4 are still unverified (see session 1).
+- Postgres 18's volume layout (mount `/var/lib/postgresql`) was verified working in Task 2.
 
 ## 5. Handoff automation (set up in session 1)
 
