@@ -51,7 +51,7 @@ Model: Opus 5.5 (orchestrator). No application code was changed.
 
 Machine and setup decisions: **Docker Engine inside WSL** (not Docker Desktop); repo in the Linux filesystem.
 
-**Calls made by the orchestrator (flagged to the owner, not explicitly vetoed):** the LLM interface signatures (spec §7.4); planning docs reach git via the implementer's Task 0 commit on the phase branch; `make env` generates random dev passwords; browser-facing dev URLs use `localhost`; `asgi-lifespan` is pre-approved as a test-only dependency; the app role has no `TEMPORARY` privilege.
+**Calls made by the orchestrator (flagged to the owner, not explicitly vetoed):** the LLM interface signatures (spec §7.4); planning docs reach git via the implementer's Task 0 commit on the phase branch; `make env` generates random dev passwords; browser-facing dev URLs use `localhost`; `asgi-lifespan` is pre-approved as a test-only dependency; the app role has no `TEMPORARY` privilege on the `feynman` and `feynman_test` databases (PUBLIC still has default CONNECT/TEMPORARY on the `postgres` database; no data exposure, see open items).
 
 **Still open (Phase 2 decisions, see the plan's Phase 2 outline):** LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling approach, job-queue library, file storage, MVP scope confirmation. Phase 3: voice, pricing/billing.
 
@@ -86,16 +86,30 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 - Web: TypeScript pinned `~5.9` (openapi-typescript peer); a small `fetch` wrapper in `client.ts`; the implementer first used oxlint (vite template default), contradicting the plan and ADR 0009, so it was switched to ESLint flat config + `eslint-config-prettier` (`d82c6f2`).
 - `npm audit`: 10 moderate dev-only advisories (minimatch via eslint/typescript-eslint). The only fix is forcing an ESLint 9 downgrade, not applied.
 - CI action pins: `actions/checkout@v7`, `actions/setup-node@v7`, `astral-sh/setup-uv@v10.3.3` (no floating `v10` tag exists; fixed in `3abaff5`).
+- `users.email` is `String` (unbounded VARCHAR) where spec §7.2 says text; the DB dependencies are named `get_session`/`get_engine` rather than the spec's `get_db`.
+- TypeScript `strict` was missing after the `~5.9` pin and was restored (tsconfig.app/node) in a final-review fix.
+- The CI Postgres service healthcheck was aligned with compose (`pg_isready -h 127.0.0.1 -U postgres`) in a final-review fix.
 - `docs/planning-handoff.md` §1: only the "Old code" row was touched (adds the `5aba556` pointer).
 
 **Incomplete**
 - CI green status (billing lock, above).
 - The draft PR is opened by the controller after the final whole-branch review.
 
+**Open items for the orchestrator/owner**
+- `.gitleaks.toml` currently exempts all `*.env.example` files from scanning; the final reviewer recommends allowlisting the `change-me` placeholder value instead (security-posture change; owner decides).
+- Hardening `REVOKE CONNECT, TEMPORARY ON DATABASE postgres FROM PUBLIC` is an open owner decision.
+- The health-timeout branch is not pinned by a test (monkeypatch `_probe` to sleep longer than the timeout).
+- `scripts/dev-env.sh` should warn when `infra/.env` is newly created but `api/.env` already exists.
+- CI actions are pinned by tag, not SHA.
+- The 500-without-CORS-headers fix is planned for Phase 2 M1.
+- Declare `python-dotenv` in the api dev group for hygiene.
+- Add a try/finally to `test_migrations` and an explicit inspector assertion on `uq_users_email_lower`.
+- `push: phase-*` plus `pull_request` double-runs CI.
+
 **Deferred minors (for the orchestrator to triage)**
 - T2: `make db` grep errors if `infra/.env` is missing (harmless); `db-psql` relies on socket trust; `api/.env.example` CORS_ORIGINS is unquoted JSON (fine for pydantic).
 - T3: `logging.basicConfig` is a no-op if the root logger has handlers (consider `force=True`); 500s from `ServerErrorMiddleware` carry no CORS headers (Starlette limitation); `conftest` imports python-dotenv, which is only a transitive dependency; the CSRF header must be added to `allow_headers` in Phase 2.
-- T4: `MIGRATION_DATABASE_URL` env var leaks (not restored) in conftest; `test_migrations` assumes serial DB use and has no `finally` on the last upgrade; dead logging sections in `alembic.ini`; `type: ignore` on `orig.__cause__` is brittle; `compare_metadata` may not fully cover the functional index `lower(email)` (unverified).
+- T4: `test_migrations` assumes serial DB use and has no `finally` on the last upgrade; dead logging sections in `alembic.ini`; `type: ignore` on `orig.__cause__` is brittle; `compare_metadata` may not fully cover the functional index `lower(email)` (unverified).
 - T5: the db-down test doesn't prove the 2s bound (port 1 refuses instantly); duplicated unreachable `Settings` in tests; `version()` is looked up per request.
 - T6: error-propagation test uses `pytest.raises(type(err))` (accepts subclasses); no tests for structured-payload cycling or the no-structured error path; `StructuredResult.value: T` may warn on dump.
 - T7: stray blank line in `index.html`; no unmount test; `typescript ~5.9` in package.json (lockfile pins exact).

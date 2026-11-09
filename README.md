@@ -38,6 +38,8 @@ Use `localhost` (not `127.0.0.1`) for the web app, because the API's CORS origin
 make check      # lint, tests, web build, and generated-types drift check
 ```
 
+`make check` needs the database running (`make db` first): the pytest DB tests fail otherwise.
+
 CI (`.github/workflows/ci.yml`) runs the same checks plus secret scanning. **CI status: pending.** The workflow has not run successfully yet because of a GitHub account billing lock; it needs a re-run once that is resolved.
 
 `make db-reset` stops Postgres and **deletes the local database volume (all local DB data is lost)**, then recreates it. Use it only if the DB was created with different credentials or you want a clean slate.
