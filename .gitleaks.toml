@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Example env files and CI throwaway passwords"
+paths = ['''\.env\.example$''']
+regexes = ['''ci-(postgres|migrator|app)''']
