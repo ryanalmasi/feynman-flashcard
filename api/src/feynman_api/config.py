@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     environment: Literal["dev", "test", "prod"] = "dev"
     health_db_timeout_seconds: float = 2.0
     upload_dir: Path = Path("var/uploads")
+    hibp_enabled: bool = True
+    hibp_timeout_seconds: float = 2.0
 
 
 class MigrationSettings(BaseSettings):

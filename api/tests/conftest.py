@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 
 from alembic import command
+from feynman_api.auth.breach import StaticBreachChecker
 from feynman_api.config import Settings
 from feynman_api.main import create_app
 from feynman_api.storage import LocalFileStore
@@ -55,6 +56,7 @@ def test_settings() -> Settings:
     return Settings(
         database_url=_test_database_url(),
         environment="test",
+        hibp_enabled=False,
         _env_file=None,
     )
 
@@ -68,7 +70,11 @@ def file_store(tmp_path: Path) -> LocalFileStore:
 
 @pytest.fixture
 def app(migrated_db: None, test_settings: Settings, file_store: LocalFileStore) -> FastAPI:
-    return create_app(test_settings, file_store=file_store)
+    return create_app(
+        test_settings,
+        file_store=file_store,
+        breach_checker=StaticBreachChecker({"breached-password-123"}),
+    )
 
 
 @pytest.fixture
