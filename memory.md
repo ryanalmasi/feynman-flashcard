@@ -4,7 +4,7 @@
 > **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
-**Last updated:** 2026-11-09 (Phase 1 implementation run complete; pending orchestrator review and owner merge)
+**Last updated:** 2026-11-09 (Phase 1 fix-up round complete; pending orchestrator re-review, the owner's billing fix and merge)
 **Latest handoff written:** #2 (`handoff-prompts/orchestrator-handoff-2.md`), plus the implementer kickoff `handoff-prompts/implementer-phase-1.md`
 
 ---
@@ -55,6 +55,24 @@ Machine and setup decisions: **Docker Engine inside WSL** (not Docker Desktop); 
 
 **Still open (Phase 2 decisions, see the plan's Phase 2 outline):** LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling approach, job-queue library, file storage, MVP scope confirmation. Phase 3: voice, pricing/billing.
 
+### Implementation run: Phase 1 fix-ups (2026-11-09)
+Model: Sonnet 5.5 implementer (single session, no subagents), following `handoff-prompts/implementer-phase-1-fixups.md` (orchestrator session 3 review of PR #1). Scope was closed: F2-F6 and F8 only. F1 (CI billing lock) is the owner's; F7 is deferred to Phase 2.
+
+| Fix | Commit | What / evidence |
+|---|---|---|
+| F2 | `9d08911` | `.gitleaks.toml`: removed the `*.env.example` path allowlist (kept `ci-(postgres\|migrator\|app)`). `gitleaks git` clean; `gitleaks dir` flags only the gitignored local `infra/.env` (3 generated dev passwords; never tracked); the `change-me` placeholders are not flagged, so no placeholder allowlist was needed. Canary `canary.env.example` (github-pat) made `pre-commit run gitleaks-system` **fail** (exit 1); never committed. Note: the config change must be staged first, because pre-commit stashes unstaged files and a first attempt silently used the old config and passed. |
+| F3 | `292b561` | `01-roles.sh`: `REVOKE CONNECT, TEMPORARY ON DATABASE postgres FROM PUBLIC`. New test `test_app_cannot_connect_to_postgres_database` (asserts `InsufficientPrivilegeError` in the exception chain) failed first ("DID NOT RAISE"), passes after `make db-reset && make migrate`. Healthcheck, `make db` probe and `make db-psql` still work. |
+| F4 | `c18a97c` | `0001_users.py` `upgrade()`: `REVOKE ALL ON TABLE alembic_version FROM feynman_app`. New parametrized test (SELECT and UPDATE raise `InsufficientPrivilegeError`) failed first, passes after. `upgrade head && downgrade base && upgrade head` works on the dev DB; migration tests green. |
+| F5 | `5079898` | `test_health_db_timeout_returns_503` (hanging `_probe`, 0.1s timeout, 503 body, < 1s). Passed with no code change; a mutation check (timeout forced to 30s) made it fail, so it is sensitive. |
+| F6 | `8e07450` | `StatusPage`: 2xx -> as before; 503 with a health body -> "API: ok / Database: error"; any other non-2xx -> `API error (HTTP <status>)`; network failure unchanged. New 500 test failed first. |
+| F8 | `3347220` | `python-dotenv` declared in the api dev group (`pyproject.toml`, `uv.lock`); CI `push` trigger is `[main]`; actions pinned by SHA (`actions/checkout` `3d3c42e5...` v7, `actions/setup-node` `949feb24...` v7, `astral-sh/setup-uv` `68559e99...` v10.3.3); the gitleaks job verifies the tarball with `sha256sum -c --ignore-missing` against `gitleaks_8.30.1_checksums.txt` before extracting (proved locally: OK on the real file, FAILED and exit 1 on a tampered copy). |
+
+**Verification**
+- `make check` passes: **40 pytest** (36 + F3 +1, F4 +2, F5 +1) and **8 vitest** (7 + F6 +1); ruff, mypy strict, ESLint, Prettier, tsc, build and the types-drift check clean. `gitleaks git --redact -v .` clean. `git log --all --name-only | grep '.env'` (excluding examples): no output.
+- **CI is still NOT verified.** After the last push the runs (latest 42547257090, event `pull_request`) again failed with zero steps: "The job was not started because your account is locked due to a billing issue." Not retried; the owner must fix GitHub billing.
+
+**Deviations:** F3's test builds the engine from `TEST_DATABASE_URL` with the database swapped to `postgres` and walks the exception chain (SQLAlchemy wraps the asyncpg error). Otherwise none.
+
 ### Implementation run: Phase 1 (2026-11-09)
 Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subagent-driven development with a fresh reviewer per task. Plan: `docs/implementation-plan.md` Tasks 0-9.
 
@@ -85,7 +103,7 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 - LLM layer: `T` bound to `BaseModel` with `noqa UP046` on `Generic[T]`; `LLMRateLimitError` has keyword-only `retry_after` and a default message; the fake raises `LLMOutputValidationError` when it has no structured payloads and rejects `chunk_size`/`dimensions` < 1; a few extra tests.
 - Web: TypeScript pinned `~5.9` (openapi-typescript peer); a small `fetch` wrapper in `client.ts`; the implementer first used oxlint (vite template default), contradicting the plan and ADR 0009, so it was switched to ESLint flat config + `eslint-config-prettier` (`d82c6f2`).
 - `npm audit`: 10 moderate dev-only advisories (minimatch via eslint/typescript-eslint). The only fix is forcing an ESLint 9 downgrade, not applied.
-- CI action pins: `actions/checkout@v7`, `actions/setup-node@v7`, `astral-sh/setup-uv@v10.3.3` (no floating `v10` tag exists; fixed in `3abaff5`).
+- CI action pins: `actions/checkout@v7`, `actions/setup-node@v7`, `astral-sh/setup-uv@v10.3.3` (no floating `v10` tag exists; fixed in `3abaff5`); now pinned by commit SHA (`3347220`).
 - `users.email` is `String` (unbounded VARCHAR) where spec §7.2 says text; the DB dependencies are named `get_session`/`get_engine` rather than the spec's `get_db`.
 - TypeScript `strict` was missing after the `~5.9` pin and was restored (tsconfig.app/node) in a final-review fix.
 - The CI Postgres service healthcheck was aligned with compose (`pg_isready -h 127.0.0.1 -U postgres`) in a final-review fix.
@@ -96,36 +114,36 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 - The draft PR is opened by the controller after the final whole-branch review.
 
 **Open items for the orchestrator/owner**
-- `.gitleaks.toml` currently exempts all `*.env.example` files from scanning; the final reviewer recommends allowlisting the `change-me` placeholder value instead (security-posture change; owner decides).
-- Hardening `REVOKE CONNECT, TEMPORARY ON DATABASE postgres FROM PUBLIC` is an open owner decision.
-- The health-timeout branch is not pinned by a test (monkeypatch `_probe` to sleep longer than the timeout).
+- ~~`.gitleaks.toml` exempts all `*.env.example` files from scanning~~ **Resolved** in the fix-up round (`9d08911`): the path allowlist is gone; the `change-me` placeholders are not flagged, so nothing else was allowlisted.
+- ~~`REVOKE CONNECT, TEMPORARY ON DATABASE postgres FROM PUBLIC`~~ **Resolved** (`292b561`).
+- ~~The health-timeout branch is not pinned by a test~~ **Resolved** (`5079898`).
 - `scripts/dev-env.sh` should warn when `infra/.env` is newly created but `api/.env` already exists.
-- CI actions are pinned by tag, not SHA.
+- ~~CI actions are pinned by tag, not SHA~~ **Resolved** (`3347220`).
 - The 500-without-CORS-headers fix is planned for Phase 2 M1.
-- Declare `python-dotenv` in the api dev group for hygiene.
+- ~~Declare `python-dotenv` in the api dev group~~ **Resolved** (`3347220`).
 - Add a try/finally to `test_migrations` and an explicit inspector assertion on `uq_users_email_lower`.
-- `push: phase-*` plus `pull_request` double-runs CI.
+- ~~`push: phase-*` plus `pull_request` double-runs CI~~ **Resolved** (`3347220`: push trigger is `main` only).
 
 **Deferred minors (for the orchestrator to triage)**
 - T2: `make db` grep errors if `infra/.env` is missing (harmless); `db-psql` relies on socket trust; `api/.env.example` CORS_ORIGINS is unquoted JSON (fine for pydantic).
-- T3: `logging.basicConfig` is a no-op if the root logger has handlers (consider `force=True`); 500s from `ServerErrorMiddleware` carry no CORS headers (Starlette limitation); `conftest` imports python-dotenv, which is only a transitive dependency; the CSRF header must be added to `allow_headers` in Phase 2.
+- T3: `logging.basicConfig` is a no-op if the root logger has handlers (consider `force=True`); 500s from `ServerErrorMiddleware` carry no CORS headers (Starlette limitation); `conftest` imports python-dotenv (now declared, `3347220`); the CSRF header must be added to `allow_headers` in Phase 2.
 - T4: `test_migrations` assumes serial DB use and has no `finally` on the last upgrade; dead logging sections in `alembic.ini`; `type: ignore` on `orig.__cause__` is brittle; `compare_metadata` may not fully cover the functional index `lower(email)` (unverified).
-- T5: the db-down test doesn't prove the 2s bound (port 1 refuses instantly); duplicated unreachable `Settings` in tests; `version()` is looked up per request.
+- T5: ~~the db-down test doesn't prove the 2s bound~~ (resolved: `5079898` pins the timeout path); duplicated unreachable `Settings` in tests; `version()` is looked up per request.
 - T6: error-propagation test uses `pytest.raises(type(err))` (accepts subclasses); no tests for structured-payload cycling or the no-structured error path; `StructuredResult.value: T` may warn on dump.
 - T7: stray blank line in `index.html`; no unmount test; `typescript ~5.9` in package.json (lockfile pins exact).
-- T8: `push: phase-*` plus `pull_request` double-runs for a PR from a `phase-*` branch (per brief); redundant `uv python install`; implicit `npm ci` dependency for `gen-types` in the web job.
+- T8: ~~`push: phase-*` plus `pull_request` double-runs~~ (resolved, `3347220`); redundant `uv python install`; implicit `npm ci` dependency for `gen-types` in the web job.
 
 ## 3. Repository state
 
 - **Path:** `~/code/feynman-flashcard`. **Branch:** `phase-1-foundation`, pushed to `origin`. `main` is unchanged at `e7bd5b9`.
 - **Draft PR:** https://github.com/ryanalmasi/feynman-flashcard/pull/1 (draft; not merged; owner merges after orchestrator review)
-- **Working tree:** clean after the Task 9 commit. `.superpowers/` (agent scratch) is gitignored. `.env` files exist locally only and are gitignored.
+- **Working tree:** clean after the fix-up round (head: see `git log`; all fix-up commits pushed). `.superpowers/` (agent scratch) is gitignored. `.env` files exist locally only and are gitignored.
 - **Machine:** all prerequisites in `docs/setup-prerequisites.md` are installed and verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
 
 ## 4. Open questions and next steps
 
-1. **Owner:** resolve the GitHub account billing lock, then re-run CI (`gh run rerun 42543763849`, or push a commit) and confirm all three jobs (api, web, secrets) go green. Until then CI is unverified.
-2. **Orchestrator:** review the draft PR against `docs/implementation-plan.md`, the spec, and the ADRs; triage the deferred minors above; report to the owner.
+1. **Owner:** resolve the GitHub account billing lock, then re-run CI (`gh run rerun 42547257090`, or push a commit) and confirm all three jobs (api, web, secrets) go green. Until then CI is unverified.
+2. **Orchestrator:** re-review the fix-up commits (`f361004..HEAD`) and the draft PR against `docs/implementation-plan.md`, the spec, and the ADRs; triage the deferred minors above; report to the owner.
 3. **Owner:** merge the PR (only the owner merges).
 4. **Then:** Phase 2 planning (decisions listed in the plan's Phase 2 outline: LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling, job queue, file storage, MVP scope).
 
