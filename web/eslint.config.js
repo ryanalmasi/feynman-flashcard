@@ -17,5 +17,10 @@ export default tseslint.config(
     ],
     languageOptions: { ecmaVersion: 2023, globals: globals.browser },
   },
+  {
+    // shadcn-generated primitives export variant helpers next to components.
+    files: ["src/components/ui/**/*.tsx"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
   prettier,
 );
