@@ -54,6 +54,29 @@ describe("StatusPage", () => {
     expect(screen.getByText("Database: error")).toBeInTheDocument();
   });
 
+  it("shows an API error, not API: ok, on a 500 error body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: "internal_error",
+              message: "Internal server error",
+              details: null,
+            },
+          },
+          500,
+        ),
+      ),
+    );
+
+    render(<StatusPage />);
+    expect(await screen.findByText("API error (HTTP 500)")).toBeInTheDocument();
+    expect(screen.queryByText("API: ok")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Database:/)).not.toBeInTheDocument();
+  });
+
   it("shows unreachable on network failure", async () => {
     vi.stubGlobal(
       "fetch",
