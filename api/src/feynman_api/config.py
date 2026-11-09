@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     login_window_seconds: int = 900
     register_ip_limit: int = 5
     register_window_seconds: int = 3600
+    job_lease_seconds: int = 300
+    job_poll_interval_seconds: float = 1.0
+    job_backoff_base_seconds: float = 10.0
 
 
 class MigrationSettings(BaseSettings):
