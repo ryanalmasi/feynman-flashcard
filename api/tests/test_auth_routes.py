@@ -286,6 +286,65 @@ async def test_delete_account_wrong_password_keeps_session(
     assert (await api_client.get("/auth/session")).status_code == 200
 
 
+WRONG = "wrong-password-xx"
+
+
+async def _delete_account(
+    client: httpx.AsyncClient, headers: dict[str, str], password: str
+) -> httpx.Response:
+    return await client.request(
+        "DELETE", "/auth/account", json={"password": password}, headers=headers
+    )
+
+
+async def test_delete_account_lockout_blocks_correct_password(
+    api_client: httpx.AsyncClient, clock: FrozenClock, db: AsyncSession
+) -> None:
+    await register(api_client)
+    headers = await auth_headers(api_client)
+    for _ in range(5):
+        r = await _delete_account(api_client, headers, WRONG)
+        assert r.status_code == 401
+        assert r.json()["error"]["code"] == "invalid_credentials"
+    r = await _delete_account(api_client, headers, PW)
+    assert r.status_code == 429
+    assert r.json()["error"]["code"] == "rate_limited"
+    assert r.headers["retry-after"].isdigit()
+    assert int(r.headers["retry-after"]) >= 1
+    assert (await db.execute(text("select count(*) from users"))).scalar_one() == 1
+    assert (await api_client.get("/auth/session")).status_code == 200
+    clock.advance(minutes=15)
+    assert (await _delete_account(api_client, headers, PW)).status_code == 204
+
+
+async def test_delete_account_limit_is_per_user(
+    api_client: httpx.AsyncClient, app: FastAPI
+) -> None:
+    await register(api_client, email="a@example.com")
+    headers_a = await auth_headers(api_client)
+    for _ in range(5):
+        assert (await _delete_account(api_client, headers_a, WRONG)).status_code == 401
+    assert (await _delete_account(api_client, headers_a, PW)).status_code == 429
+
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client_b:
+        assert (await register(client_b, email="b@example.com")).status_code == 201
+        headers_b = await auth_headers(client_b)
+        r = await _delete_account(client_b, headers_b, WRONG)
+        assert r.status_code == 401
+        assert r.json()["error"]["code"] == "invalid_credentials"
+
+
+async def test_delete_account_success_after_failures_under_limit(
+    api_client: httpx.AsyncClient,
+) -> None:
+    await register(api_client)
+    headers = await auth_headers(api_client)
+    for _ in range(4):
+        assert (await _delete_account(api_client, headers, WRONG)).status_code == 401
+    assert (await _delete_account(api_client, headers, PW)).status_code == 204
+
+
 TABLES = (
     "users",
     "auth_identities",

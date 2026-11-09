@@ -233,18 +233,31 @@ async def get_current_session(
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
     },
 )
 async def delete_account(
     body: DeleteAccountIn,
     request: Request,
     db: Db,
+    clock: Now,
     current: Annotated[CurrentUser, Depends(current_user)],
     file_store: Annotated[FileStore, Depends(get_file_store)],
 ) -> Response:
     user = current.user
+    settings = _settings(request)
+    window = timedelta(seconds=settings.account_delete_window_seconds)
+    limit = settings.account_delete_failure_limit
+    key = rate_limit.account_delete_key(user.id)
+    now = clock()
+    # Lockout is checked before any password verification.
+    state = await rate_limit.peek(db, key, limit, window, now)
+    if not state.allowed:
+        raise rate_limited(state.retry_after)
     if user.password_hash is None or not await verify_password(user.password_hash, body.password):
+        await rate_limit.hit(db, key, limit, window, now)
         raise invalid_credentials()
+    await rate_limit.clear(db, key)
     keys = list(
         (
             await db.execute(

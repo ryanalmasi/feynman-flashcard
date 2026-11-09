@@ -1,5 +1,6 @@
 import hashlib
 import math
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -79,3 +80,7 @@ def email_key(email: str) -> str:
 
 def ip_key(prefix: str, ip: str) -> str:
     return prefix + ip
+
+
+def account_delete_key(user_id: uuid.UUID) -> str:
+    return "account_delete:user:" + str(user_id)

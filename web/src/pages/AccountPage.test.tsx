@@ -75,6 +75,29 @@ describe("AccountPage", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("/account");
   });
 
+  it("429 shows the rate-limit message and keeps the user signed in", async () => {
+    const user = userEvent.setup();
+    stubFetch({
+      "GET /auth/session": () => json(session, 200),
+      "DELETE /auth/account": () =>
+        json(
+          apiError("rate_limited", "Too many attempts. Try again later."),
+          429,
+        ),
+    });
+    renderAt("/account", routes);
+    await openDialog(user);
+    await user.type(screen.getByLabelText("Password"), "wrong-password-123");
+    await user.click(screen.getByRole("button", { name: "Delete my account" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Too many attempts. Try again later.",
+    );
+    expect(
+      screen.getByRole("link", { name: "Study sets", hidden: true }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("where")).toHaveTextContent("/account");
+  });
+
   it("successful delete signs out and goes to /register", async () => {
     const user = userEvent.setup();
     const fetchMock = stubFetch({

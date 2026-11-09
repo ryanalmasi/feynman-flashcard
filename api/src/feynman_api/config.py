@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     login_email_failure_limit: int = 5
     login_ip_limit: int = 20
     login_window_seconds: int = 900
+    account_delete_failure_limit: int = 5
+    account_delete_window_seconds: int = 900
     register_ip_limit: int = 5
     register_window_seconds: int = 3600
     job_lease_seconds: int = 300

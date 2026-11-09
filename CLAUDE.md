@@ -122,7 +122,7 @@ All routes except `/health`, `/auth/register` and `/auth/login` need the session
 | POST | `/auth/login` | 200 `{user, csrf_token}`; 401 `invalid_credentials`, 429 (per-email lockout and per-IP limit). No breach check on login |
 | POST | `/auth/logout` | 204, clears the session |
 | GET | `/auth/session` | 200 `{user, csrf_token}` or 401 |
-| DELETE | `/auth/account` | 204; body `{password}`; deletes the user, sets, cards, documents, jobs, sessions and files. No attempt limit |
+| DELETE | `/auth/account` | 204; body `{password}`; deletes the user, sets, cards, documents, jobs, sessions and files. Wrong password: 401 `invalid_credentials`; after 5 failures in 15 min (per user): 429 `rate_limited` + `Retry-After`, checked before the password |
 | GET / POST | `/study-sets` | List own sets (with card count and document summary) / create (201) |
 | GET / PATCH / DELETE | `/study-sets/{set_id}` | Owner-scoped; DELETE is 204 and removes the stored PDF |
 | GET / POST | `/study-sets/{set_id}/flashcards` | List / create a card (201) |
