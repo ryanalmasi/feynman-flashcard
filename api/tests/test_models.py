@@ -74,14 +74,14 @@ async def test_all_tables_exist(app_connection: AsyncConnection) -> None:
 @pytest.mark.parametrize("title", ["", "x" * 121])
 async def test_study_set_title_check(db_session: AsyncSession, title: str) -> None:
     uid = await _user(db_session)
-    with pytest.raises(IntegrityError, match="ck_study_sets_title_length"):
+    with pytest.raises(IntegrityError, match=r'constraint "ck_study_sets_title_length"'):
         await _set(db_session, uid, title=title)
 
 
 async def test_study_set_description_check(db_session: AsyncSession) -> None:
     uid = await _user(db_session)
     await _set(db_session, uid, desc="x" * 1000)
-    with pytest.raises(IntegrityError, match="ck_study_sets_description_length"):
+    with pytest.raises(IntegrityError, match=r'constraint "ck_study_sets_description_length"'):
         await _set(db_session, uid, desc="x" * 1001)
 
 
@@ -90,7 +90,7 @@ async def test_study_set_description_check(db_session: AsyncSession) -> None:
 )
 async def test_flashcard_length_checks(db_session: AsyncSession, front: str, back: str) -> None:
     sid = await _set(db_session, await _user(db_session))
-    with pytest.raises(IntegrityError, match="ck_flashcards_"):
+    with pytest.raises(IntegrityError, match=r'constraint "ck_flashcards_(front|back)_length"'):
         await _card(db_session, sid, front, back)
 
 
@@ -99,7 +99,7 @@ async def test_flashcard_origin_check(db_session: AsyncSession) -> None:
     await _card(db_session, sid)
     row = await db_session.execute(text("SELECT origin FROM flashcards"))
     assert row.scalar_one() == "manual"
-    with pytest.raises(IntegrityError, match="ck_flashcards_origin"):
+    with pytest.raises(IntegrityError, match=r'constraint "ck_flashcards_origin"'):
         await _card(db_session, sid, origin="ai")
 
 
@@ -112,7 +112,7 @@ async def test_one_document_per_set(db_session: AsyncSession) -> None:
 
 async def test_document_status_check(db_session: AsyncSession) -> None:
     sid = await _set(db_session, await _user(db_session))
-    with pytest.raises(IntegrityError, match="ck_documents_status"):
+    with pytest.raises(IntegrityError, match=r'constraint "ck_documents_status"'):
         await _doc(db_session, sid, status="done")
 
 
@@ -127,7 +127,7 @@ async def test_job_status_check_and_defaults(db_session: AsyncSession) -> None:
     ).one()
     assert (row.status, row.attempts, row.max_attempts) == ("queued", 0, 3)
     assert row.run_after is not None
-    with pytest.raises(IntegrityError, match="ck_jobs_status"):
+    with pytest.raises(IntegrityError, match=r'constraint "ck_jobs_status"'):
         await db_session.execute(
             text(
                 "INSERT INTO jobs (id, user_id, kind, payload, status) "
@@ -179,3 +179,35 @@ async def test_user_delete_cascades_everything(db_session: AsyncSession) -> None
     ):
         count = (await db_session.execute(text(f"SELECT count(*) FROM {table}"))).scalar_one()  # noqa: S608
         assert count == 0, table
+
+
+async def test_check_constraint_names_exact(app_connection: AsyncConnection) -> None:
+    rows = await app_connection.execute(
+        text(
+            "SELECT conname FROM pg_constraint WHERE contype = 'c' "
+            "AND connamespace = 'public'::regnamespace ORDER BY conname"
+        )
+    )
+    assert {r[0] for r in rows} == {
+        "ck_study_sets_title_length",
+        "ck_study_sets_description_length",
+        "ck_flashcards_front_length",
+        "ck_flashcards_back_length",
+        "ck_flashcards_origin",
+        "ck_documents_status",
+        "ck_documents_original_filename_length",
+        "ck_jobs_status",
+    }
+
+
+@pytest.mark.parametrize("name", ["", "x" * 256])
+async def test_document_filename_length_check(db_session: AsyncSession, name: str) -> None:
+    sid = await _set(db_session, await _user(db_session))
+    with pytest.raises(IntegrityError, match='constraint "ck_documents_original_filename_length"'):
+        await db_session.execute(
+            text(
+                "INSERT INTO documents (id, study_set_id, storage_key, original_filename, "
+                "size_bytes, status) VALUES (:i, :s, :k, :n, 1, 'ready')"
+            ),
+            {"i": uuid.uuid4(), "s": sid, "k": uuid.uuid4().hex, "n": name},
+        )

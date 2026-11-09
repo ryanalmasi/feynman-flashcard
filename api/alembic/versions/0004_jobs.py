@@ -47,7 +47,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint(
-            "status IN ('queued','running','succeeded','failed')", name="ck_jobs_status"
+            "status IN ('queued','running','succeeded','failed')", name=op.f("ck_jobs_status")
         ),
         sa.ForeignKeyConstraint(
             ["user_id"], ["users.id"], name=op.f("fk_jobs_user_id_users"), ondelete="CASCADE"

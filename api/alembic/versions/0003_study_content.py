@@ -33,11 +33,11 @@ def upgrade() -> None:
         _ts("created_at"),
         _ts("updated_at"),
         sa.CheckConstraint(
-            "char_length(title) BETWEEN 1 AND 120", name="ck_study_sets_title_length"
+            "char_length(title) BETWEEN 1 AND 120", name=op.f("ck_study_sets_title_length")
         ),
         sa.CheckConstraint(
             "description IS NULL OR char_length(description) <= 1000",
-            name="ck_study_sets_description_length",
+            name=op.f("ck_study_sets_description_length"),
         ),
         sa.ForeignKeyConstraint(
             ["user_id"], ["users.id"], name=op.f("fk_study_sets_user_id_users"), ondelete="CASCADE"
@@ -55,12 +55,12 @@ def upgrade() -> None:
         _ts("created_at"),
         _ts("updated_at"),
         sa.CheckConstraint(
-            "char_length(front) BETWEEN 1 AND 500", name="ck_flashcards_front_length"
+            "char_length(front) BETWEEN 1 AND 500", name=op.f("ck_flashcards_front_length")
         ),
         sa.CheckConstraint(
-            "char_length(back) BETWEEN 1 AND 2000", name="ck_flashcards_back_length"
+            "char_length(back) BETWEEN 1 AND 2000", name=op.f("ck_flashcards_back_length")
         ),
-        sa.CheckConstraint("origin IN ('manual','generated')", name="ck_flashcards_origin"),
+        sa.CheckConstraint("origin IN ('manual','generated')", name=op.f("ck_flashcards_origin")),
         sa.ForeignKeyConstraint(
             ["study_set_id"],
             ["study_sets.id"],
@@ -84,10 +84,12 @@ def upgrade() -> None:
         sa.Column("error_message", sa.String(), nullable=True),
         _ts("created_at"),
         _ts("updated_at"),
-        sa.CheckConstraint("status IN ('processing','ready','failed')", name="ck_documents_status"),
+        sa.CheckConstraint(
+            "status IN ('processing','ready','failed')", name=op.f("ck_documents_status")
+        ),
         sa.CheckConstraint(
             "char_length(original_filename) BETWEEN 1 AND 255",
-            name="ck_documents_original_filename_length",
+            name=op.f("ck_documents_original_filename_length"),
         ),
         sa.ForeignKeyConstraint(
             ["study_set_id"],
