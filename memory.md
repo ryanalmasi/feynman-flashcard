@@ -5,6 +5,7 @@
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
 **Last updated:** 2026-11-09 (Phase 1 merged with CI green; Phase 2 decided through 2a: ADRs 0012–0018 and the approved 2a design. Next: write the 2a plan)
+**Phase 2a implementation in progress (see the Phase 2a entry in §2; resume prompt `handoff-prompts/implementer-phase-2a-resume-1.md`).**
 **Latest handoff written:** #3 (`handoff-prompts/orchestrator-handoff-3.md`), plus the implementer kickoffs `handoff-prompts/implementer-phase-1.md` and `implementer-phase-1-fixups.md`
 
 ---
@@ -158,6 +159,41 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 - T6: error-propagation test uses `pytest.raises(type(err))` (accepts subclasses); no tests for structured-payload cycling or the no-structured error path; `StructuredResult.value: T` may warn on dump.
 - T7: stray blank line in `index.html`; no unmount test; `typescript ~5.9` in package.json (lockfile pins exact).
 - T8: ~~`push: phase-*` plus `pull_request` double-runs~~ (resolved, `3347220`); redundant `uv python install`; implicit `npm ci` dependency for `gen-types` in the web job.
+
+### Implementation run: Phase 2a, IN PROGRESS (2026-11-09)
+
+Implementer session 1 (Sonnet 5.5, subagent-driven-development; controller + per-task implementer + reviewer). Branch `phase-2a-foundations`, pushed. **Tasks 0-13 are complete and reviewed; Task 14 is implemented (`a04be21`) but NOT yet reviewed; Task 14 step 5 (the owner's browser check) and Task 15 remain.** The full ledger and per-task briefs/reports/review diffs are in the gitignored `.superpowers/sdd/implementation-plan-phase-2a/` (`progress.md`); it survives on this machine, but the table below is the durable summary.
+
+| Task | Commit(s) | Notes |
+|---|---|---|
+| 0 docs | `370d54a` | plan line with a literal test password replaced by a runtime-generated SENTINEL (gitleaks flagged it; no config change) |
+| 1 leftovers | `5f42968` | |
+| 2 models/migrations | `f910470`, `655964c` | fix: CHECK names were doubled (op.f); exact-name test |
+| 3 FileStore | `e16b547`, `ffb9dc1` | fix: cancellation-safe put |
+| 4 passwords/HIBP | `756a003` | |
+| 5 sessions/rate limit/CSRF | `e415016`, `65b614d` | fix: error table codified in errors.py; framework 404 message `Not found.` |
+| 6 auth routes | `d9ad746`, `683aff0` | test hardening (age month term, matrix, NFKC, dummy verify) |
+| 7 study sets/cards | `af19f8e` | |
+| 8 job queue/worker | `f9dfc48`, `13bc840` | fix: failing on_failed no longer loops; lease-lost rollback pinned |
+| 9 upload | `e0c5359`, `bd1c86d` | fix: file kept after commit; filename Cf/control chars; NUL rejected in title/description/front/back |
+| 10 extract_pdf | `d7c6ca2`, `db541fd` | fix: NUL stripped from extracted text |
+| 11 web foundation | `eeeed18`, `d1504c9` | fix: safeNext tab/newline bypass; failed session check = signed out; class-based `dark` variant |
+| 12 login/register/account | `59b4b06`, `1b02676` | test hardening |
+| 13 sets/detail/review | `c978f67` | |
+| 14 upload + polling | `a04be21` | implemented, 98 vitest; review pending |
+
+Counts at `a04be21`: 233 pytest, 98 vitest (`make check` green, gitleaks clean). CI NOT yet checked on this branch (Task 15 step 2; zero-step billing failures mean stop and tell the owner).
+
+**Owner decisions to surface in the PR body (not changed by the implementer):**
+1. `DELETE /auth/account` has no rate limit on password attempts (as the plan specifies): a stolen session could brute-force the password and burn argon2 CPU. Recommend a per-user failure limit.
+2. FastAPI parses multipart before dependencies, so an unauthenticated caller can make the server spool up to ~20 MiB + 64 KiB to temp disk per request (gets 413, not 401). Bounded by `BodySizeLimitMiddleware`. Options: cookie-presence precheck in the middleware, or a reverse-proxy limit at deployment.
+3. If `on_failed` fails persistently, a document can stay `processing` (mildly conflicts with design 7.6; strictly better than the endless loop it replaced).
+
+**Deviations for the PR body:** CSRF matrix and ownership meta-test enumerate routes via a shared `walk_routes` (FastAPI 0.162 hides included routers from `app.routes`); unknown-email logins also count toward the per-email limiter (consistent with design 7.8); birth_year range check lives in the route (needs the clock); NUL rejection added to study-set/card schemas and upload title; upload `title` Form validated by hand (strip, 1-120); pre-commit gets no PDF exclude (`.gitattributes` has `*.pdf binary`); `@custom-variant dark (&:is(.dark *))` added to `index.css` (no `.dark` block); `tsconfig.app.json` has `types: ["node"]` globally (needed by `tokens.test.ts`); `DocumentStatus` prop is `document` and SetDetailPage passes `key={document.id}`; the plan's Task 6 sentinel-password edit (above); Task 6 implementation was written before its tests (a test-hardening follow-up with mutation checks was added).
+
+**Deferred minors (final whole-branch review should triage):** see `progress.md`. Highlights: Task 13 review flip control lacks Enter activation/accessible name and modifier-key guard; a failed card delete does not reload; several web test gaps (set-edit PATCH body, refresh-after-mutation, load-error states); idle-expiry/rate-limit float window math; a duplicate `local json()` helper across web tests; no `pypdfium2` upper bound; no cap on extracted text size; free-text NUL handling in auth email/password not checked.
+
+**Where to resume:** see `handoff-prompts/implementer-phase-2a-resume-1.md`.
 
 ## 3. Repository state
 
