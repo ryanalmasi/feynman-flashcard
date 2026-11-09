@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal
 
 from pydantic import SecretStr
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     environment: Literal["dev", "test", "prod"] = "dev"
     health_db_timeout_seconds: float = 2.0
+    upload_dir: Path = Path("var/uploads")
 
 
 class MigrationSettings(BaseSettings):

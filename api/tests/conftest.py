@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_e
 from alembic import command
 from feynman_api.config import Settings
 from feynman_api.main import create_app
+from feynman_api.storage import LocalFileStore
 
 API_DIR = Path(__file__).resolve().parent.parent
 DB_HINT = "Test database is unreachable or not migrated. Run `make db` from the repo root first."
@@ -59,8 +60,15 @@ def test_settings() -> Settings:
 
 
 @pytest.fixture
-def app(migrated_db: None, test_settings: Settings) -> FastAPI:
-    return create_app(test_settings)
+def file_store(tmp_path: Path) -> LocalFileStore:
+    root = tmp_path / "uploads"
+    root.mkdir()
+    return LocalFileStore(root)
+
+
+@pytest.fixture
+def app(migrated_db: None, test_settings: Settings, file_store: LocalFileStore) -> FastAPI:
+    return create_app(test_settings, file_store=file_store)
 
 
 @pytest.fixture
