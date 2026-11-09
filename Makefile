@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: env db db-down db-reset db-psql migrate
+.PHONY: env db db-down db-reset db-psql migrate api
 
 env:
 	./scripts/dev-env.sh
@@ -25,3 +25,6 @@ db-psql:
 
 migrate:
 	cd api && uv run alembic upgrade head
+
+api:
+	cd api && uv run uvicorn --factory feynman_api.main:create_app --reload --host 127.0.0.1 --port 8000

@@ -6,6 +6,7 @@ import asyncpg  # type: ignore[import-untyped]
 import httpx
 import pytest
 from alembic.config import Config
+from asgi_lifespan import LifespanManager
 from dotenv import dotenv_values
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
@@ -63,9 +64,10 @@ def app(test_settings: Settings) -> FastAPI:
 
 @pytest.fixture
 async def api_client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
-    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+    async with LifespanManager(app):
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
 
 
 @pytest.fixture(scope="session")

@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from feynman_api.config import Settings
 from feynman_api.db import create_engine, create_sessionmaker
 from feynman_api.errors import register_error_handlers
+from feynman_api.routes.health import router as health_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -34,4 +35,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Content-Type"],
     )
     register_error_handlers(app)
+    app.include_router(health_router)
     return app
