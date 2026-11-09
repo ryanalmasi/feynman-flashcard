@@ -2,6 +2,5 @@
 useDefault = true
 
 [allowlist]
-description = "Example env files and CI throwaway passwords"
-paths = ['''\.env\.example$''']
+description = "CI throwaway passwords"
 regexes = ['''ci-(postgres|migrator|app)''']
