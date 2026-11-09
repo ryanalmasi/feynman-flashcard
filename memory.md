@@ -192,7 +192,7 @@ Model: Sonnet 5.5 implementers and reviewers under a controller (subagent-driven
 
 **Owner decisions to confirm (not changed by the implementers):**
 1. Unauthenticated multipart requests to `/documents` make the server spool up to ~20 MiB + 64 KiB to temp disk before auth (FastAPI parses multipart before dependencies; the caller gets 413, not 401). Bounded by the middleware cap. Options: a cookie-presence precheck in the middleware, or a reverse-proxy limit at deployment.
-2. `DELETE /auth/account` has no attempt limit (a stolen session could brute-force the password and burn argon2 CPU, as the plan specified). A per-user failure limit is recommended.
+2. **Resolved in the fix-up round (`5d0e027`):** `DELETE /auth/account` now has a per-user failure limit (5 per 15 min, 429 `rate_limited`, checked before password verification). Previously it had none, as the plan specified.
 3. No cap on extracted PDF text size or extraction time.
 4. NUL characters are rejected in the study-set, card and upload-title schemas (approved by the controller).
 5. `on_failed` fallback deviates from design §7.6: if `on_failed` raises, the worker rolls back, logs, and commits `mark_failed` alone. A document can stay `processing` only if `on_failed` fails persistently; this is strictly better than the endless retry loop it replaced.
@@ -221,6 +221,15 @@ Per-task deferred minors (compact):
 - T10: no upper bound on `pypdfium2`; concurrent reprocess untested. T11: global `types: ["node"]`; 401 handler on `/login` navigates to `/login?next=%2Flogin` (handled in T12).
 - T13: the review flip control lacks Enter activation/accessible name and a modifier-key guard; no state reset on `setId` change; a failed card delete does not reload; several test gaps (set-edit PATCH body, refresh-after-mutation, load-error states).
 - T14: an in-flight poll at the 10-minute mark is dropped; no abort/timeout on the poll GET; `useState(document)` ignores prop changes; a duplicate local `json()` test helper; 413/415 tests cannot distinguish the server message from the fixed string.
+
+### Implementation run: Phase 2a fix-ups (2026-11-09)
+Model: Sonnet 5.5, working directly (no subagents), after the orchestrator reviewed draft PR #2 and approved one fix (`handoff-prompts/implementer-phase-2a-fixups.md`, commit `2177c5b`).
+
+- **R3 (`5d0e027`):** failed password attempts on `DELETE /auth/account` are limited with the existing Postgres rate limiter: settings `account_delete_failure_limit` (5) and `account_delete_window_seconds` (900), key `account_delete:user:<id>`, `peek` before verification (a full window blocks even the correct password), `hit` on a wrong password, `clear` on success. The 429 is documented on the route and `schema.gen.ts` regenerated.
+- **Tests (TDD; the lockout and per-user tests failed first because the correct password still returned 204):** `test_delete_account_lockout_blocks_correct_password`, `test_delete_account_limit_is_per_user`, `test_delete_account_success_after_failures_under_limit`, and a web test "429 shows the rate-limit message and keeps the user signed in" (passed with no page change).
+- **Counts:** 238 pytest (was 235) and 99 vitest (was 98); `make check` and `gitleaks git --redact -v .` clean locally.
+- **Deviations:** none from the fix-up prompt.
+- **CI at `5d0e027`:** the `api` and `web` jobs passed. The `secrets` job failed three times (run 42579982884, attempts 1-3) at "Install gitleaks" with `curl: (22) ... error: 504` from GitHub's release download, before gitleaks ran; the URL returned 200 from the dev machine. It is a download failure, not a leak or a billing lock. The CI result for the final commit is in the PR body.
 
 ## 3. Repository state
 
