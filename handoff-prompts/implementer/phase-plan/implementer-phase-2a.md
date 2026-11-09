@@ -51,5 +51,5 @@ Don't merge and don't mark the PR ready. The orchestrator reviews it, and the ow
 
 If context gets large, the handoff hook may fire. For this run, a handoff means:
 1. Update `memory.md` with progress (completed tasks with commit ids, the current task and step, any failures or open questions).
-2. Write `handoff-prompts/implementer-phase-2a-resume-N.md` telling the next implementer session where to resume.
+2. Write `handoff-prompts/implementer/phase-plan/implementer-phase-2a-resume-N.md` telling the next implementer session where to resume.
 3. Stop.

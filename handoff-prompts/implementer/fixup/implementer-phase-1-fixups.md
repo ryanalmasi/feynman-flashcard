@@ -96,4 +96,4 @@ Today any non-2xx body becomes "API: ok / Database: error"; a 500 error body eve
 
    Then **stop**. The orchestrator re-reviews, and the owner merges.
 
-If context gets large and the handoff hook fires, update `memory.md` with progress (fixes done, the current fix and step), then write `handoff-prompts/implementer-phase-1-fixups-resume-1.md` telling the next session where to resume.
+If context gets large and the handoff hook fires, update `memory.md` with progress (fixes done, the current fix and step), then write `handoff-prompts/implementer/fixup/implementer-phase-1-fixups-resume-1.md` telling the next session where to resume.

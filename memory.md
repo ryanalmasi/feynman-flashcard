@@ -1,11 +1,11 @@
 # memory.md: running project context
 
 > **Purpose:** the repo's own record of what has happened so far, so a fresh agent session can pick up without the old conversation.
-> **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
+> **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
 **Last updated:** 2026-11-09 (Phase 2a built, reviewed, fixed up and CI green on draft PR #2; **awaiting the owner's merge**. Next: the 2b decision round)
-**Latest handoff written:** #4 (`handoff-prompts/orchestrator-handoff-4.md`), plus implementer kickoffs `implementer-phase-1.md`, `implementer-phase-1-fixups.md`, `implementer-phase-2a.md`, `implementer-phase-2a-fixups.md` (and `implementer-phase-2a-resume-1.md`)
+**Latest handoff written:** #4 (`handoff-prompts/orchestrator/orchestrator-handoff-4.md`), plus implementer kickoffs `implementer-phase-1.md`, `implementer-phase-1-fixups.md`, `implementer-phase-2a.md`, `implementer-phase-2a-fixups.md` (and `implementer-phase-2a-resume-1.md`)
 
 ---
 
@@ -60,7 +60,7 @@ Model: Opus 5.5 (orchestrator). No application code written by the orchestrator.
 
 **Completed**
 1. Reviewed draft PR #1 task by task against the plan, spec §2–§4 and ADRs; re-ran `make check` locally (36 pytest / 7 vitest) and checked role privileges against the live DB. Verdict: conformant. Findings: F1 CI never ran (GitHub billing lock), F2 gitleaks path-allowlisted all `*.env.example`, F3 app role could CONNECT/TEMP on the `postgres` DB, F4 app role had DML on `alembic_version`, F5 health timeout untested, F6 status page treated any error body as a health body, F7 500s carry no CORS headers (deferred to Phase 2 M1), F8 hygiene.
-2. Wrote `handoff-prompts/implementer-phase-1-fixups.md`; the owner approved all fixes. A Sonnet implementer did F2–F6 + F8 (entry below). Orchestrator re-review: clean; `make check` 40 pytest / 8 vitest; action SHAs verified against their tags.
+2. Wrote `handoff-prompts/implementer/fixup/implementer-phase-1-fixups.md`; the owner approved all fixes. A Sonnet implementer did F2–F6 + F8 (entry below). Orchestrator re-review: clean; `make check` 40 pytest / 8 vitest; action SHAs verified against their tags.
 3. The owner fixed the GitHub billing lock (the $0 "usage blocked" budgets were not the cause; it was an account-level lock). CI re-run **42547339617 green** on `ff0ae19`: api 16/16, web 17/17, secrets 6/6 steps (https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42547339617).
 4. **The owner merged PR #1 on 2026-11-09 (squash merge → `3185eb1` on `main`).** The per-task commits remain on the `phase-1-foundation` branch and in the PR.
 
@@ -82,7 +82,7 @@ Model: Opus 5.5 (orchestrator). No application code written by the orchestrator.
 **Still open:** 2b decisions (LLM provider + models with prices re-verified, provider data-retention/training settings, Knowledge Map details, card count/style); 2c decisions (embedding model, scoring parameters τ/weights/δ/insufficient-evidence threshold, tutor prompt and session limits, feedback format, usage-data retention). Launch-time: EU 13–15 users, ToS/privacy policy wording.
 
 ### Implementation run: Phase 1 fix-ups (2026-11-09)
-Model: Sonnet 5.5 implementer (single session, no subagents), following `handoff-prompts/implementer-phase-1-fixups.md` (orchestrator session 3 review of PR #1). Scope was closed: F2-F6 and F8 only. F1 (CI billing lock) is the owner's; F7 is deferred to Phase 2.
+Model: Sonnet 5.5 implementer (single session, no subagents), following `handoff-prompts/implementer/fixup/implementer-phase-1-fixups.md` (orchestrator session 3 review of PR #1). Scope was closed: F2-F6 and F8 only. F1 (CI billing lock) is the owner's; F7 is deferred to Phase 2.
 
 | Fix | Commit | What / evidence |
 |---|---|---|
@@ -223,7 +223,7 @@ Per-task deferred minors (compact):
 - T14: an in-flight poll at the 10-minute mark is dropped; no abort/timeout on the poll GET; `useState(document)` ignores prop changes; a duplicate local `json()` test helper; 413/415 tests cannot distinguish the server message from the fixed string.
 
 ### Implementation run: Phase 2a fix-ups (2026-11-09)
-Model: Sonnet 5.5, working directly (no subagents), after the orchestrator reviewed draft PR #2 and approved one fix (`handoff-prompts/implementer-phase-2a-fixups.md`, commit `2177c5b`).
+Model: Sonnet 5.5, working directly (no subagents), after the orchestrator reviewed draft PR #2 and approved one fix (`handoff-prompts/implementer/fixup/implementer-phase-2a-fixups.md`, commit `2177c5b`).
 
 - **R3 (`5d0e027`):** failed password attempts on `DELETE /auth/account` are limited with the existing Postgres rate limiter: settings `account_delete_failure_limit` (5) and `account_delete_window_seconds` (900), key `account_delete:user:<id>`, `peek` before verification (a full window blocks even the correct password), `hit` on a wrong password, `clear` on success. The 429 is documented on the route and `schema.gen.ts` regenerated.
 - **Tests (TDD; the lockout and per-user tests failed first because the correct password still returned 204):** `test_delete_account_lockout_blocks_correct_password`, `test_delete_account_limit_is_per_user`, `test_delete_account_success_after_failures_under_limit`, and a web test "429 shows the rate-limit message and keeps the user signed in" (passed with no page change).
@@ -236,7 +236,7 @@ Model: Opus 5.5 (orchestrator). Application code was written only by implementer
 
 **Completed**
 1. Wrote **`docs/implementation-plan-phase-2a.md`** (Tasks 0-15, 8 Review Focus items each pinned to a named test). A builder-check subagent (plan only) found 3 would-fail issues: the 413 cap mechanism (FastAPI wraps non-HTTP exceptions during `request.form()` as 400), uncommitted rate-limit/session writes, and a register-page regex matching "2013". It also found 11 smaller gaps. All were fixed in the plan. Fixed two stale lines in the 2a design header (status "Approved", plan path).
-2. Wrote `handoff-prompts/implementer-phase-2a.md`. The owner approved the plan, the prompt and the six *(orch.)* calls:
+2. Wrote `handoff-prompts/implementer/phase-plan/implementer-phase-2a.md`. The owner approved the plan, the prompt and the six *(orch.)* calls:
    - logging via `basicConfig` + root `setLevel` instead of `force=True` (`force` strips pytest's caplog handler)
    - indigo accent (from the mockup)
    - the fixed error-message table (plan Task 5)
@@ -256,7 +256,7 @@ Model: Opus 5.5 (orchestrator). Application code was written only by implementer
    - (L) a 5xx on `/auth/session` signs the user out
    - (L) the review flip control has no accessible name or Enter key
    - (process) Task 6 code was written before its tests (later mutation-hardened)
-4. The owner chose a fix-up round for the attempt limit only. Wrote `handoff-prompts/implementer-phase-2a-fixups.md`; the implementer delivered R3 (`5d0e027`, entry above). Re-review: correct. `make check` passes with 238 pytest / 99 vitest; gitleaks is clean over 65 commits.
+4. The owner chose a fix-up round for the attempt limit only. Wrote `handoff-prompts/implementer/fixup/implementer-phase-2a-fixups.md`; the implementer delivered R3 (`5d0e027`, entry above). Re-review: correct. `make check` passes with 238 pytest / 99 vitest; gitleaks is clean over 65 commits.
 5. **CI secrets job failed** (runs 42579982884 and 42580331206, 3 attempts each) at "Install gitleaks": `curl: (22) … 504`. The cause was a GitHub incident ("Increased timeouts due to surge in anonymous users"). With the owner's go-ahead, the orchestrator committed **`cd2883b` `ci: download gitleaks with an authenticated, retried request`**. It uses `gh release download` with `GH_TOKEN: ${{ github.token }}`, 3 attempts, and the sha256 check unchanged (verified locally: OK on the real file, exit 1 on a tampered copy). **CI green: run 42581239361** (https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42581239361), api, web and secrets.
 6. **Owner's browser checks, closed:**
    - The owner ran `make env`; `api/.env` now has `SESSION_COOKIE_SECURE=false`.
@@ -278,7 +278,7 @@ The 2c decisions as listed in the Session 3 entry. Optional later items: the L f
 - **Path:** `~/code/feynman-flashcard`. **Branch checked out:** `phase-2a-foundations` at `cd2883b`, pushed and in sync with `origin`. `main` is still at `3185eb1` (Phase 1); it has no 2a code until the owner merges PR #2.
 - **PR #1** (Phase 1): merged. **PR #2** (Phase 2a): https://github.com/ryanalmasi/feynman-flashcard/pull/2. It is **draft, open, CI green** (run 42581239361 at `cd2883b`) and reviewed with no blocking findings. **The owner merges** (and marks it ready first).
   - The PR body's CI section still describes the failed secrets runs; the orchestrator offered to update it.
-- **Uncommitted (orchestrator session 4 handoff):** `memory.md`, `CLAUDE.md`, `docs/planning-handoff.md` (small status updates), and the new `handoff-prompts/orchestrator-handoff-4.md`.
+- **Uncommitted (orchestrator session 4 handoff):** `memory.md`, `CLAUDE.md`, `docs/planning-handoff.md` (small status updates), and the new `handoff-prompts/orchestrator/orchestrator-handoff-4.md`.
   - Recommended: commit them onto `phase-2a-foundations` before the merge, so they land in `main` with 2a.
   - Otherwise commit them on `main` (or the 2b branch) after the merge.
   - Only when the owner asks.
@@ -288,7 +288,7 @@ The 2c decisions as listed in the Session 3 entry. Optional later items: the L f
 ## 4. Open questions and next steps
 
 1. **Owner:** commit the session-4 handoff docs (see §3), mark PR #2 ready, and merge it (squash, as with PR #1). Then `git switch main && git pull`.
-2. **Next orchestrator session (#5, `handoff-prompts/orchestrator-handoff-4.md`):** run the **2b decision round** (ADR 0012: M4 Knowledge Map, M5 generated flashcards). Order:
+2. **Next orchestrator session (#5, `handoff-prompts/orchestrator/orchestrator-handoff-4.md`):** run the **2b decision round** (ADR 0012: M4 Knowledge Map, M5 generated flashcards). Order:
    1. LLM provider and models: re-verify prices and the data-retention/training settings; students may be minors.
    2. Knowledge Map details (schema, editing, versions).
    3. Card count and style.
@@ -305,6 +305,6 @@ The 2c decisions as listed in the Session 3 entry. Optional later items: the L f
 
 ## 5. Handoff automation (set up in session 1)
 
-- **Skill `/handoff`** (`.claude/skills/handoff/SKILL.md`): update `memory.md` → update docs → write `handoff-prompts/orchestrator-handoff-N.md` **last** → tell the owner to start a new session.
+- **Skill `/handoff`** (`.claude/skills/handoff/SKILL.md`): update `memory.md` → update docs → write `handoff-prompts/orchestrator/orchestrator-handoff-N.md` **last** → tell the owner to start a new session.
 - **Hook** (`.claude/settings.json` → `.claude/hooks/handoff-check.py`) on `UserPromptSubmit` and `PostToolUse`: a heads-up at ≥ 250k tokens, run the handoff at ≥ 300k, and a reminder when the owner's prompt mentions a handoff. Thresholds: `HANDOFF_WARN_TOKENS` / `HANDOFF_URGENT_TOKENS`.
 - Claude Code keys sessions and private memory by folder path. After the move to `~/code`, the hook config loads from the new folder's `.claude/` automatically.

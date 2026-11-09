@@ -1,13 +1,13 @@
 # Implementer resume: Phase 2a (resume 1)
 
-> Paste as the opening prompt of a new **Sonnet** Claude Code session in `~/code/feynman-flashcard`. Written 2026-11-09 by implementer session 1 because its context filled up. The owner's approval and every rule in `handoff-prompts/implementer-phase-2a.md` still apply (read it first; it is the kickoff for this run).
+> Paste as the opening prompt of a new **Sonnet** Claude Code session in `~/code/feynman-flashcard`. Written 2026-11-09 by implementer session 1 because its context filled up. The owner's approval and every rule in `handoff-prompts/implementer/phase-plan/implementer-phase-2a.md` still apply (read it first; it is the kickoff for this run).
 
 ## Where things stand
 - Branch `phase-2a-foundations` (pushed). **Tasks 0-13 complete and reviewed. Task 14 implemented in `a04be21` (98 vitest, 233 pytest, `make check` green) but its review has NOT been done.** Remaining: review Task 14, Task 14 step 5 (the owner's manual browser check), then Task 15.
 - The run uses **superpowers:subagent-driven-development**: the controller (you) dispatches a fresh implementer subagent per task (model `sonnet`), then a reviewer (sonnet; opus for security-critical), runs a fix loop for Critical/Important findings, and finishes with a whole-branch review. Resume the loop; do not redo finished tasks.
 
 ## Read first, in order
-1. `handoff-prompts/implementer-phase-2a.md` (rules), `CLAUDE.md`, `memory.md` (the "Implementation run: Phase 2a, IN PROGRESS" entry: commit table, owner decisions, deviations, deferred minors).
+1. `handoff-prompts/implementer/phase-plan/implementer-phase-2a.md` (rules), `CLAUDE.md`, `memory.md` (the "Implementation run: Phase 2a, IN PROGRESS" entry: commit table, owner decisions, deviations, deferred minors).
 2. `docs/implementation-plan-phase-2a.md` (Global Constraints lines 15-58; Review Focus; Tasks 14 and 15).
 3. The ledger `.superpowers/sdd/implementation-plan-phase-2a/progress.md` (gitignored; on this machine; per-task `task-N-brief.md`, `task-N-report.md`, review diffs are beside it). Per the skill, read `references/resuming.md` of the SDD skill first. If the ledger is missing, recover from `git log` and `memory.md`.
 
@@ -21,4 +21,4 @@
 - Commits: `git -c user.name=ryanalmasii -c user.email=ryanalmasii@gmail.com commit ...`, Conventional Commits, trailer `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. Before every push: `make check`, then `gitleaks git --redact -v .`. Never push to/merge into `main`, force-push, or tag.
 - Only the plan's approved dependencies. Never edit `.gitleaks.toml` (change test strings instead). Do not edit ADRs or the design.
 - pre-commit stashes unstaged files: `git add` first. The types-drift check compares against the git index: stage `web/src/api/schema.gen.ts` before `make check`.
-- If context fills again: update `memory.md`, write `handoff-prompts/implementer-phase-2a-resume-2.md`, stop.
+- If context fills again: update `memory.md`, write `handoff-prompts/implementer/phase-plan/implementer-phase-2a-resume-2.md`, stop.

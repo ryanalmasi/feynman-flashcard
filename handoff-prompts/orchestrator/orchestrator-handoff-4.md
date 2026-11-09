@@ -20,7 +20,7 @@ You are the **orchestrator / planning lead** for the Feynman Flashcard project. 
 5. The 2a artefacts as templates:
    - `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md` (design format)
    - `docs/implementation-plan-phase-2a.md` (plan format: Global Constraints, Review Focus pinned to named tests, File Structure, tasks with Interfaces, failing tests first, one commit)
-   - `handoff-prompts/implementer-phase-2a.md` and `implementer-phase-2a-fixups.md` (kickoff formats)
+   - `handoff-prompts/implementer/phase-plan/implementer-phase-2a.md` and `implementer-phase-2a-fixups.md` (kickoff formats)
 6. The code the 2b work builds on:
    - `api/src/feynman_api/llm/` (`base.py`, `fake.py`) and `api/tests/llm/test_contract.py`: a real adapter must pass these
    - `jobs/` (queue, worker, `registry.py`, `handlers/extract_pdf.py`): 2b adds job kinds
@@ -89,7 +89,7 @@ You are the **orchestrator / planning lead** for the Feynman Flashcard project. 
      - pin Actions by SHA
      - the owner's browser check runs in the Windows browser
    - Builder-check the plan (in 2a this caught three would-fail issues).
-5. **Write `handoff-prompts/implementer-phase-2b.md`** (Sonnet, subagent-driven development; standing permission to commit and push only the 2b branch; draft PR; never merges; stops on any unplanned dependency or architectural choice). Because the session starts cold, the prompt must open with a numbered **"Read these first, in order"** list:
+5. **Write `handoff-prompts/implementer/phase-plan/implementer-phase-2b.md`** (Sonnet, subagent-driven development; standing permission to commit and push only the 2b branch; draft PR; never merges; stops on any unplanned dependency or architectural choice). Because the session starts cold, the prompt must open with a numbered **"Read these first, in order"** list:
    - `CLAUDE.md`
    - **named** `memory.md` entries (Session 5 and the "Implementation run: Phase 2a" and fix-up entries, for the deviations and deferred minors that affect 2b)
    - the 2b plan, including its context section
@@ -120,4 +120,4 @@ Note ideas in the docs, but don't build them.
 When the owner asks for a handoff, or the hook says so, use the `/handoff` skill:
 1. Update `memory.md` first.
 2. Then update the stale docs.
-3. Write `handoff-prompts/orchestrator-handoff-5.md` **last**. Never overwrite an earlier handoff.
+3. Write `handoff-prompts/orchestrator/orchestrator-handoff-5.md` **last**. Never overwrite an earlier handoff.

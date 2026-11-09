@@ -137,7 +137,7 @@ Task order follows the handoff, with three changes:
 
 **Files:** none created. Commits orchestrator session 3/4's uncommitted work:
 - modified: `CLAUDE.md`, `memory.md`, `docs/planning-handoff.md`, `docs/adr/README.md`
-- untracked: `docs/adr/0012-mvp-scope-and-phase-2-split.md`, `docs/adr/0013-age-policy.md`, `docs/adr/0014-ui-styling.md`, `docs/adr/0015-job-queue-own-table.md`, `docs/adr/0016-file-storage.md`, `docs/adr/0017-auth-security-details.md`, `docs/adr/0018-study-content-model-and-pdf-library.md`, `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`, `docs/implementation-plan-phase-2a.md`, `handoff-prompts/orchestrator-handoff-3.md`, `handoff-prompts/implementer-phase-2a.md`
+- untracked: `docs/adr/0012-mvp-scope-and-phase-2-split.md`, `docs/adr/0013-age-policy.md`, `docs/adr/0014-ui-styling.md`, `docs/adr/0015-job-queue-own-table.md`, `docs/adr/0016-file-storage.md`, `docs/adr/0017-auth-security-details.md`, `docs/adr/0018-study-content-model-and-pdf-library.md`, `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`, `docs/implementation-plan-phase-2a.md`, `handoff-prompts/orchestrator/orchestrator-handoff-3.md`, `handoff-prompts/implementer/phase-plan/implementer-phase-2a.md`
 
 - [ ] **Step 1:** `cd ~/code/feynman-flashcard`. Run the verification block in `docs/setup-prerequisites.md` §7 → `ALL PREREQUISITES OK`. Otherwise **stop** and report.
 - [ ] **Step 2:** `git switch main && git pull --ff-only`. `git status --porcelain` must list **exactly** the paths above:
@@ -145,7 +145,7 @@ Task order follows the handoff, with three changes:
   - `??` for the untracked ones, where a directory may show as e.g. `?? docs/adr/0012-…`
   Anything else (in particular any `.env` or `mode change`) → stop and ask. `git log --oneline -1` → `3185eb1 Phase 1: architecture foundation (#1)` or a later commit the owner made (if later, ask before continuing).
 - [ ] **Step 3:** `git switch -c phase-2a-foundations`.
-- [ ] **Step 4:** `git add CLAUDE.md memory.md docs/planning-handoff.md docs/adr/ docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md docs/implementation-plan-phase-2a.md handoff-prompts/orchestrator-handoff-3.md handoff-prompts/implementer-phase-2a.md`. Then `git status --porcelain` → nothing unstaged or untracked. Commit `docs: add Phase 2 ADRs 0012-0018, 2a design, 2a plan, session 3 handoff`.
+- [ ] **Step 4:** `git add CLAUDE.md memory.md docs/planning-handoff.md docs/adr/ docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md docs/implementation-plan-phase-2a.md handoff-prompts/orchestrator/orchestrator-handoff-3.md handoff-prompts/implementer/phase-plan/implementer-phase-2a.md`. Then `git status --porcelain` → nothing unstaged or untracked. Commit `docs: add Phase 2 ADRs 0012-0018, 2a design, 2a plan, session 3 handoff`.
 - [ ] **Step 5:** `make db && make migrate && make check` → passes. Record the actual counts (expected after the Phase 1 fix-ups: 40 pytest, 8 vitest; `CLAUDE.md`'s 36/7 is stale). `gitleaks git --redact -v .` → no leaks. `git push -u origin phase-2a-foundations`.
 
 ---

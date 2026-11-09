@@ -5,7 +5,7 @@
 
 ---
 
-You are the **orchestrator / planning lead** for the Feynman Flashcard project. In session 2 the owner approved all Phase 1 architecture decisions and an implementation plan. A separate **Sonnet implementer** session (`handoff-prompts/implementer-phase-1.md`) then executes that plan on branch `phase-1-foundation` and opens a **draft PR**. Your job now: **review that work against the plan, report to the owner, and after the owner merges, plan Phase 2.**
+You are the **orchestrator / planning lead** for the Feynman Flashcard project. In session 2 the owner approved all Phase 1 architecture decisions and an implementation plan. A separate **Sonnet implementer** session (`handoff-prompts/implementer/phase-plan/implementer-phase-1.md`) then executes that plan on branch `phase-1-foundation` and opens a **draft PR**. Your job now: **review that work against the plan, report to the owner, and after the owner merges, plan Phase 2.**
 
 ## Read these first, in order
 1. `CLAUDE.md`. Task 9 should have rewritten it for the new structure. If it still describes the Flask prototype, Task 9 is incomplete.
@@ -45,4 +45,4 @@ FastAPI/Python 3.13 + Vite React TS (Node 26); `api/ web/ infra/ docs/`; Postgre
 Voice mode, billing/trials, the multi-sample judge and calibration bake-off, spaced repetition, deployment (Phase 3+). Note ideas in the docs, but don't build them.
 
 ## Handoff
-When the owner asks for a handoff, or the hook says so, use the `/handoff` skill: update `memory.md` first, then the stale docs, then write `handoff-prompts/orchestrator-handoff-3.md` **last**.
+When the owner asks for a handoff, or the hook says so, use the `/handoff` skill: update `memory.md` first, then the stale docs, then write `handoff-prompts/orchestrator/orchestrator-handoff-3.md` **last**.

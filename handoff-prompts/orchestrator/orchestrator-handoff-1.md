@@ -47,6 +47,6 @@ Voice mode, billing/trials, the multi-sample judge and calibration bake-off, spa
 Use the `/handoff` skill (`.claude/skills/handoff/SKILL.md`). The order matters:
 1. **Update `memory.md` first**, adding a Session log entry, the repo state, and the next steps.
 2. Update any other docs that are now stale (`docs/planning-handoff.md` §1/§5, ADRs, `docs/implementation-plan.md`, `CLAUDE.md`).
-3. **Write `handoff-prompts/orchestrator-handoff-2.md` last** (highest existing number + 1). Say what was decided, what was built, where things stand against the plan, and exactly what the next session should do.
+3. **Write `handoff-prompts/orchestrator/orchestrator-handoff-2.md` last** (highest existing number + 1). Say what was decided, what was built, where things stand against the plan, and exactly what the next session should do.
 
 A hook (`.claude/hooks/handoff-check.py`) will remind you at about 250k tokens (heads-up) and 300k tokens (run the handoff). If you don't see it fire, ask the owner to open `/hooks` once or restart so the project settings load.

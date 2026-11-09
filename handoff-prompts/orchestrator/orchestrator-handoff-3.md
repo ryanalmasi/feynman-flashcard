@@ -13,7 +13,7 @@ You are the **orchestrator / planning lead** for the Feynman Flashcard project. 
 3. **`docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`: the approved design and your source of truth.** §2 has the goals and exit criteria, §3 the non-goals, §4 the anti-goals, §5 the constraints and approved dependencies, §7 the design, §8 what's left to the builder. Items marked "orchestrator's call" are approved as part of the design.
 4. `docs/adr/0012`–`0018` (the Phase 2 decisions) and, as needed, `0001`–`0011`.
 5. `docs/implementation-plan.md`: **the Phase 1 plan. Use it as the format template** (Global Constraints, Review Focus, File Structure, then per task: Files, Interfaces, failing tests first, steps, one commit). Its "Phase 2 outline" section is superseded by ADR 0012 and the 2a design.
-6. `handoff-prompts/implementer-phase-1.md` and `implementer-phase-1-fixups.md`: templates for the kickoff prompt.
+6. `handoff-prompts/implementer/phase-plan/implementer-phase-1.md` and `implementer-phase-1-fixups.md`: templates for the kickoff prompt.
 7. `docs/planning-handoff.md` §0, §2, §5: the roadmap, the scoring design (needed in 2c), and the decisions still open.
 
 ## What happened since handoff #2
@@ -64,7 +64,7 @@ You are the **orchestrator / planning lead** for the Feynman Flashcard project. 
      - The owner's manual browser check runs in the Windows browser under WSL.
    - **Don't put any 2b/2c work in the plan.**
 3. Run a builder check on the plan if it helps (a fresh subagent reading only the plan). Settle minor questions yourself and mark them; bring the owner only questions that change what gets built.
-4. **Write `handoff-prompts/implementer-phase-2a.md`:** a Sonnet implementer using subagent-driven development. It has standing permission for this run only to commit and push `phase-2a-foundations`, opens a draft PR, never merges, and stops and asks on any unplanned dependency or architectural choice.
+4. **Write `handoff-prompts/implementer/phase-plan/implementer-phase-2a.md`:** a Sonnet implementer using subagent-driven development. It has standing permission for this run only to commit and push `phase-2a-foundations`, opens a draft PR, never merges, and stops and asks on any unplanned dependency or architectural choice.
 5. Present the plan and prompt to the owner for approval. **The owner starts the implementer session.**
 6. **After the implementer's draft PR:** review it against the plan the way session 3 reviewed PR #1 (task by task, Review Focus, anti-goals, exit criteria, CI link). Report findings ranked by severity. Write a fix-up prompt if the owner wants one. **The owner merges.**
 7. After 2a merges: the **2b decision round**. The LLM provider and models come first (re-verify prices; check data-retention and training settings; students may be minors), then the Knowledge Map details and the card count and style. Then the 2b design, plan and prompt, the same way.
@@ -82,4 +82,4 @@ You are the **orchestrator / planning lead** for the Feynman Flashcard project. 
 Note ideas in the docs, but don't build them.
 
 ## Handoff
-When the owner asks for a handoff, or the hook says so, use the `/handoff` skill: update `memory.md` first, then the stale docs, then write `handoff-prompts/orchestrator-handoff-4.md` **last**.
+When the owner asks for a handoff, or the hook says so, use the `/handoff` skill: update `memory.md` first, then the stale docs, then write `handoff-prompts/orchestrator/orchestrator-handoff-4.md` **last**.

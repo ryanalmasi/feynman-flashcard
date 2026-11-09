@@ -26,4 +26,4 @@ You are the **implementer** for Phase 1 (architecture foundation) of the Feynman
 ## Finish
 Task 9 ends by opening a **draft** PR (`gh pr create --draft`) and updating `memory.md`. Report the PR URL to the owner, then **stop**. Don't merge and don't mark the PR ready. The owner merges after an orchestrator review. Phase 2 is **out of scope**, including everything in the plan's "Phase 2 outline: NOT FOR EXECUTION" section.
 
-If context gets large, the handoff hook may fire. For this run, a handoff means: update `memory.md` with progress (completed tasks, the current task and step, any failures), then write `handoff-prompts/implementer-phase-1-resume-N.md` telling the next implementer session where to resume.
+If context gets large, the handoff hook may fire. For this run, a handoff means: update `memory.md` with progress (completed tasks, the current task and step, any failures), then write `handoff-prompts/implementer/phase-plan/implementer-phase-1-resume-N.md` telling the next implementer session where to resume.

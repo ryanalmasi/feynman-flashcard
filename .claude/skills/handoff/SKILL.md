@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Hand the project off to a fresh agent session. Use when the owner says it's time to hand off, wants to start a new agent session, or asks for a handoff, or when the handoff hook reports context at about 250k-300k tokens. Updates memory.md first, then writes the next handoff-prompts/orchestrator-handoff-N.md as the final step.
+description: Hand the project off to a fresh agent session. Use when the owner says it's time to hand off, wants to start a new agent session, or asks for a handoff, or when the handoff hook reports context at about 250k-300k tokens. Updates memory.md first, then writes the next handoff-prompts/orchestrator/orchestrator-handoff-N.md as the final step.
 ---
 
 # Handoff procedure
@@ -22,7 +22,7 @@ Be factual. Report incomplete or failed work as incomplete or failed.
 - `CLAUDE.md`: update it only if the repo structure, commands, or rules changed. Update the "Latest" handoff number in its file map.
 
 ## 3. Write the handoff prompt (last)
-1. List `handoff-prompts/` and find the highest `orchestrator-handoff-N.md`. The new file is `orchestrator-handoff-(N+1).md`. **Never overwrite an earlier handoff.**
+1. List `handoff-prompts/orchestrator/` and find the highest `orchestrator-handoff-N.md`. The new file is `orchestrator-handoff-(N+1).md`. **Never overwrite an earlier handoff.**
 2. Write it as a self-contained prompt for a brand-new session. Include:
    - **Read first, in order:** `CLAUDE.md`, `memory.md`, then the relevant docs (`docs/planning-handoff.md`, `docs/adr/*`, `docs/implementation-plan.md`)
    - what was decided and built since the previous handoff, and what is still open

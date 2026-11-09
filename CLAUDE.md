@@ -52,7 +52,11 @@ feynman-flashcard/
 │   ├── implementation-plan-phase-2a.md   Phase 2a plan (Tasks 0-15)
 │   ├── planning-handoff.md       Roadmap (§0), decisions (§1), scoring design (§2), research, costs, open decisions (§5)
 │   └── setup-prerequisites.md    Machine setup (WSL, Docker, uv, Node, gh, gitleaks)
-├── handoff-prompts/              Numbered orchestrator handoffs (latest: #4) + implementer kickoffs
+├── handoff-prompts/
+│   ├── orchestrator/             Numbered orchestrator handoffs (latest: #4)
+│   └── implementer/
+│       ├── phase-plan/           Implementer kickoffs per phase (+ resume prompts for a phase run)
+│       └── fixup/                Implementer kickoffs for fix-up rounds after a PR review
 ├── .claude/                      settings.json (handoff hooks), hooks/handoff-check.py, skills/handoff/SKILL.md
 ├── .github/workflows/ci.yml      Jobs: api, web, secrets
 ├── .gitignore / .gitattributes / .gitleaks.toml / .pre-commit-config.yaml
@@ -200,7 +204,7 @@ Local results at the end of Phase 2a (after the fix-up, `5d0e027`): **238 pytest
 **Every time the owner asks for a handoff, do these steps in this order. The handoff prompt is always the LAST step.**
 1. **Update `memory.md` first:** bump the dates and handoff number, add a Session log entry (what was completed, what the owner decided, what is still open), refresh the repo state (git status, files added or changed, anything uncommitted) and the next steps and caveats. Be factual about anything incomplete or failed.
 2. **Update the other docs that are now stale:** `docs/planning-handoff.md` §1/§5, the ADRs and `docs/implementation-plan.md` if they exist, and this file if the structure, commands, or rules changed.
-3. **Write the handoff prompt last:** a new file `handoff-prompts/orchestrator-handoff-N.md`, where N is the highest existing number + 1. Never overwrite earlier handoffs. It is a self-contained prompt for the next agent session and should include:
+3. **Write the handoff prompt last:** a new file `handoff-prompts/orchestrator/orchestrator-handoff-N.md`, where N is the highest existing number + 1. Never overwrite earlier handoffs. It is a self-contained prompt for the next agent session and should include:
    - which files to read first, in order (`CLAUDE.md`, `memory.md`, then the planning doc, ADRs, the implementation plan, and so on)
    - what has been decided and built since the previous handoff, and what is still open
    - where things stand against the phase plan, and exactly what the next session should do
@@ -216,7 +220,7 @@ If you see a `[handoff-hook]` note in your context, follow it as described here.
 
 ### Implementer sessions start cold (owner's rule)
 **Every phase, and every fix-up round, runs in a brand-new implementer session** that has none of the orchestrator's context. Its plan and kickoff prompt must therefore carry everything it needs to catch up:
-- **The kickoff prompt** (`handoff-prompts/implementer-*.md`) opens with a numbered **"Read these first, in order"** list:
+- **The kickoff prompt** (`handoff-prompts/implementer/phase-plan/implementer-phase-*.md` for a phase, `handoff-prompts/implementer/fixup/implementer-phase-*-fixups.md` for a fix-up round) opens with a numbered **"Read these first, in order"** list:
   - `CLAUDE.md`
   - the relevant `memory.md` entries, **named**
   - the plan
