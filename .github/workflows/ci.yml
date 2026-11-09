@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci-postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://feynman_app:ci-app@127.0.0.1:5432/feynman
+      MIGRATION_DATABASE_URL: postgresql+asyncpg://feynman_migrator:ci-migrator@127.0.0.1:5432/feynman
+      TEST_DATABASE_URL: postgresql+asyncpg://feynman_app:ci-app@127.0.0.1:5432/feynman_test
+      TEST_MIGRATION_DATABASE_URL: postgresql+asyncpg://feynman_migrator:ci-migrator@127.0.0.1:5432/feynman_test
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Create roles and databases
+        working-directory: .
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: ci-postgres
+          MIGRATOR_PASSWORD: ci-migrator
+          APP_PASSWORD: ci-app
+        run: bash infra/postgres/init/01-roles.sh
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv python install 3.13
+      - run: uv sync --locked
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run mypy src tests
+      - name: Migrations round trip
+        run: uv run alembic upgrade head && uv run alembic downgrade base && uv run alembic upgrade head
+      - run: uv run pytest
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv python install 3.13
+        working-directory: api
+      - run: uv sync --locked
+        working-directory: api
+      - name: Types drift check
+        working-directory: .
+        run: |
+          make gen-types
+          git diff --exit-code web/src/api/schema.gen.ts
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          base=https://github.com/gitleaks/gitleaks/releases/download/v8.30.1
+          mkdir "$RUNNER_TEMP/gitleaks-dl"
+          cd "$RUNNER_TEMP/gitleaks-dl"
+          curl -sSfLO "$base/gitleaks_8.30.1_linux_x64.tar.gz"
+          curl -sSfLO "$base/gitleaks_8.30.1_checksums.txt"
+          sha256sum -c --ignore-missing gitleaks_8.30.1_checksums.txt
+          tar -xzf gitleaks_8.30.1_linux_x64.tar.gz -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - run: gitleaks git --redact -v .

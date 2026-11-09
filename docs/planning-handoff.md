@@ -73,10 +73,18 @@ Full scoring robustness (§2.6–2.9), calibration and bake-off (§2.9, §3.1), 
 | Topic | Status |
 |---|---|
 | Phase order | **Decided:** refactor/restructure → MVP → improvements (§0). |
-| Stack | **Open (Phase 1 decision).** A full rewrite is allowed. Pick the best fit for streaming chat, voice, and PDF ingestion, and justify it. |
-| Database | **Leaning towards PostgreSQL.** Secure, minimal setup (see §3.4). |
-| Scoring | **Multi-stage:** an objective baseline plus AI-graded rubric scores, reconciled into a final score. Full design in §2; the MVP subset is in §0. |
-| LLM / voice / embeddings | **Research done (§3). Owner decision pending.** |
+| Stack | **Decided (2026-11-08):** FastAPI / Python 3.13 ([ADR 0001](adr/0001-backend-fastapi.md)) + Vite React TS ([0002](adr/0002-frontend-vite-react-ts.md)); layout `api/ web/ infra/ docs/` ([0003](adr/0003-repo-layout.md)). |
+| Database | **Decided:** Postgres 18, SQLAlchemy 2 async + Alembic, migrator/app least-privilege roles ([0004](adr/0004-database-migrations-roles.md)). Host decided at deployment (Phase 3). |
+| Auth | **Decided:** own Postgres sessions; email+password in MVP, Google sign-in next ([0005](adr/0005-auth.md)). |
+| Config / secrets | **Decided** ([0006](adr/0006-config-secrets.md)). |
+| LLM abstraction | **Decided:** own thin interface ([0007](adr/0007-llm-provider-abstraction.md)). **Provider choice still open (P2).** |
+| Background jobs | **Decided:** Postgres queue + worker, built in Phase 2 ([0008](adr/0008-background-jobs.md)). |
+| Tooling / CI | **Decided** ([0009](adr/0009-testing-lint-ci.md)). |
+| Old code | **Decided and done:** clean restart, kept the 7 images; the prototype is in git history at `5aba556` ([0010](adr/0010-old-prototype-code.md)). |
+| Git workflow | **Decided:** pushed phase branches, draft PR, owner merges ([0011](adr/0011-git-workflow.md)). |
+| Scoring | **Multi-stage:** an objective baseline plus AI-graded rubric scores, reconciled into a final score. Full design in §2; the MVP subset is in §0. Parameters open (P2). |
+| Embeddings | **Local model** (follows from 0001); exact model open (P2). |
+| LLM provider / voice | **Research done (§3). Owner decision pending** (provider P2, voice P3). |
 | Pricing | **Draft only (§4b).** Not part of the MVP, but usage logging is. |
 | Old "Illumina" DB name | Irrelevant; drop it. |
 
@@ -431,7 +439,7 @@ Notes:
 Present each with options, trade-offs and a recommendation before implementation.
 **Phase tags:** P1 = must be decided in Phase 1 (architecture). P2 = needed for the MVP. P3 = can wait.
 
-- **P1:** #1 stack, #4 embeddings (follows from the stack), #5 Postgres host + auth approach, #9 fate of the old code, plus the Phase 1 ADR list in §0
+- **P1: all decided 2026-11-08/09**, see ADRs 0001–0011 and §1. (#4: local embeddings, model TBD in P2. #5: auth decided; Postgres host deferred to deployment.)
 - **P2:** #2 LLM provider (one for the MVP), #6 scoring parameters (MVP subset), #7 privacy basics (age policy, data retention), #8 MVP scope confirmation
 - **P3:** #3 voice, #10 pricing and billing
 

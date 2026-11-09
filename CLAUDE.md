@@ -2,7 +2,9 @@
 
 Guidance for Claude Code sessions in this repository. It describes what the repo **currently is**, not what it is meant to become. The product vision is covered separately below so the two don't get mixed up.
 
-> **Status:** Early prototype, dormant since Jan 2025. The code was written by hand with ChatGPT pasting, with no agentic tooling. There are no tests, no CI, no migrations, and no Docker. Several features shown in the UI are placeholders. Expect bugs (listed in [Known Issues](#known-issues--gaps)).
+> **Status (2026-11-09):** **Phase 1 (architecture foundation) is complete on branch `phase-1-foundation`, pending the owner's review and merge.** It is a skeleton only: a FastAPI app with `GET /health`, a Postgres schema (`users`, `auth_identities`), a Vite React TS status page, the LLM/embedder interfaces with fakes, and tooling/CI. There are **no product features yet** (no auth endpoints, flashcards, PDF upload, or scoring). Phase 2 (MVP) has not been planned in detail; see the outline at the end of `docs/implementation-plan.md` (marked NOT FOR EXECUTION). Read `memory.md` next. CI has been written but is **unverified** (see `memory.md`).
+>
+> The Jan-2025 prototype is in git history at `5aba556`.
 
 ---
 
@@ -15,19 +17,23 @@ A study tool built around the **Feynman technique**: after studying, the student
 3. **Feedback:** the agent reviews the conversation and reports what was missing, wrong, or unclear, and what to work on.
 4. **Auto-generated flashcards (supplementary):** agents parse an uploaded lesson PDF or a discussion topic and generate a full set of flashcards for review.
 
-**What exists today toward that vision:** manual flashcard CRUD, plus a single-card "Feynman" textbox. That textbox scores one typed explanation against the card's stored definition using cosine similarity of sentence embeddings, and returns a canned feedback string. There is no conversation, no agent, no LLM, no voice, no PDF ingestion, and no flashcard generation.
+
+**What exists today toward that vision:** only the Phase 1 skeleton described in the status banner above. The tutor, scoring, feedback, and flashcard generation are all still to be built (Phase 2 and later).
 
 ---
 
-## Tech stack (as written)
+## Tech stack
 
-| Layer | Tech |
-|---|---|
-| Frontend | React 18 (Create React App / `react-scripts` 5), React Router v6, axios, react-modal, react-select, FontAwesome |
-| Backend | Flask, Flask-SQLAlchemy, Flask-Session (Redis), Flask-CORS, bcrypt, python-dotenv |
-| Database | MySQL via PyMySQL; database name is hard-coded as `Illumina` |
-| Sessions | Server-side sessions in Redis (cookie-based, `withCredentials`) |
-| "AI" | `sentence-transformers` model `bert-base-nli-mean-tokens` (deprecated) + scikit-learn `cosine_similarity` |
+| Layer | Tech | ADR |
+|---|---|---|
+| Backend | FastAPI, Python 3.13, uv, Uvicorn, pydantic-settings | 0001, 0006 |
+| Database | PostgreSQL 18 (Docker Compose), SQLAlchemy 2 async (asyncpg), Alembic; roles `feynman_migrator` (DDL) and `feynman_app` (DML only) | 0004 |
+| Frontend | Vite, React 19, TypeScript (~5.9), React Router 8, openapi-fetch with generated types | 0002, 0009 |
+| LLM layer | Own Protocols (`stream_chat`, `generate_structured`, `Embedder`) with `Usage` on every call; fakes only, no real provider yet | 0007 |
+| Tooling | ruff, mypy strict, pytest (real Postgres), ESLint (flat config) + Prettier, Vitest, pre-commit, gitleaks, GitHub Actions | 0006, 0009 |
+| Auth / jobs | Decided but **not built** (own Postgres sessions; Postgres-backed job queue) | 0005, 0008 |
+
+Decisions live in `docs/adr/` (index: `docs/adr/README.md`). Do not edit an ADR without the owner.
 
 ---
 
@@ -35,190 +41,133 @@ A study tool built around the **Feynman technique**: after studying, the student
 
 ```
 feynman-flashcard/
-├── CLAUDE.md                     ← this file
-├── docs/planning-handoff.md      Design + research doc: roadmap (§0), scoring design, providers, costs, pricing, open decisions
-├── memory.md                     Running project context + completed work. Read right after this file; update FIRST on every handoff
-├── handoff-prompts/              Numbered prompts for starting the next agent session (orchestrator-handoff-N.md). Latest: #1. Written LAST in a handoff
-├── .claude/                      Project Claude Code config: settings.json (handoff hooks), hooks/handoff-check.py, skills/handoff/SKILL.md
-├── README.md                     Setup instructions (partly inaccurate, see Running Locally)
-├── LICENSE                       MIT
-├── requirements.txt              Python deps (at REPO ROOT, not backend/). Unused: pandas, numpy (imported but unused), flask-bcrypt (code uses `bcrypt` directly)
-├── .DS_Store                     macOS junk, committed by mistake
-│
-├── backend/
-│   ├── .DS_Store                 macOS junk
-│   └── feynman_card/             Flat module dir, NOT a Python package (no __init__.py); imports are `from models import ...`
-│       ├── routes.py             ★ Flask app entry point. Creates `app`, configures Session/CORS/DB, runs `db.create_all()`, defines all HTTP routes. `python routes.py` starts the debug server on :5000
-│       ├── methods.py            Business logic: register/login, create set, add card, list cards, `evaluate_user_response()`. Loads the SentenceTransformer model at import time (slow, happens on first request because routes import methods lazily inside handlers)
-│       ├── models.py             SQLAlchemy models: Users, FlashcardSets, Flashcards (32-char hex UUID PKs)
-│       ├── config.py             `AppConfig`, reads .env: SECRET_KEY, DB_USRNAME (sic), DB_PASSWORD, DB_HOST, REDIS_URL
-│       ├── flask_session/        5 stale filesystem session files, committed by mistake (from an earlier filesystem session backend)
-│       └── __pycache__/          Compiled .pyc, committed by mistake
-│
-└── frontend/                     Create React App project
-    ├── package.json / package-lock.json
-    ├── .gitignore                Standard CRA ignore (the only .gitignore in the repo)
-    ├── README.md                 Stock CRA readme
-    ├── public/                   Stock CRA index.html (title still "React App"), manifest, favicon, logos
+├── CLAUDE.md / memory.md / README.md / LICENSE
+├── Makefile                      Developer entry points (see Commands)
+├── docs/
+│   ├── adr/                      ADRs 0001-0011 + README index
+│   ├── superpowers/specs/        Phase 1 design spec
+│   ├── implementation-plan.md    Phase 1 plan (Tasks 0-9) + Phase 2 outline (NOT FOR EXECUTION)
+│   ├── planning-handoff.md       Roadmap (§0), decisions (§1), scoring design (§2), research, costs, open decisions (§5)
+│   └── setup-prerequisites.md    Machine setup (WSL, Docker, uv, Node, gh, gitleaks)
+├── handoff-prompts/              Numbered orchestrator handoffs + implementer-phase-1.md
+├── .claude/                      settings.json (handoff hooks), hooks/handoff-check.py, skills/handoff/SKILL.md
+├── .github/workflows/ci.yml      Jobs: api, web, secrets
+├── .gitignore / .gitattributes   Ignore rules (.env, .superpowers/, generated files); line-ending rules
+├── .gitleaks.toml                gitleaks config (allowlist)
+├── .pre-commit-config.yaml       Hooks: check-added-large-files, check-merge-conflict, end-of-file-fixer, trailing-whitespace, detect-private-key, check-yaml, ruff, ruff-format, gitleaks
+├── scripts/dev-env.sh            `make env`: generates gitignored .env files with random dev passwords
+├── infra/
+│   ├── docker-compose.yml        Postgres 18 (127.0.0.1:5432), volume `feynman_pgdata`
+│   └── postgres/init/            01-roles.sh creates the migrator/app roles and databases
+├── api/                          FastAPI project (uv)
+│   ├── pyproject.toml / uv.lock / .env.example
+│   ├── alembic/ + alembic.ini    Migrations; `versions/0001_users.py`
+│   ├── src/feynman_api/
+│   │   ├── main.py               `create_app()` factory (lifespan, CORS, error handlers)
+│   │   ├── config.py             `Settings`, `MigrationSettings` (pydantic-settings)
+│   │   ├── db.py                 Async engine/session helpers, `get_engine`
+│   │   ├── errors.py             JSON error shape + handlers
+│   │   ├── openapi_dump.py       Dumps the OpenAPI schema for type generation
+│   │   ├── models/               SQLAlchemy `Base`, `User`, `AuthIdentity`
+│   │   ├── routes/health.py      `GET /health`
+│   │   └── llm/                  `base.py` (Protocols, types), `errors.py`, `fake.py` (fakes)
+│   └── tests/                    pytest; `llm/` holds the provider contract tests
+└── web/                          Vite React TS app (npm); `.env.example` (also `infra/.env.example`)
+    ├── openapi.json              Generated by `make gen-types` (gitignored, not committed)
     └── src/
-        ├── index.js              createRoot → <App/>
-        ├── App.js                Router: "/" → HomePage, "/sets" → FlashcardSets, "/sets/:setName" → Flashcard. Sets axios.defaults.withCredentials
-        ├── assets/images/        feynman.png, flashcard_graphic.png, learning.png (used by HomePage); background-auth*.png (used by AuthPage.css)
-        └── components/
-            ├── HomePage.js       Marketing landing page: header nav, hero, feature carousel (DOM-manipulating infinite scroll), "What is the Feynman Technique" sections with a mouse-hover spotlight effect, footer. Hosts the sign-in/sign-up overlay via activePage/activeTab state
-            ├── AuthPage.js       Modal shell (overlay, close button, left title panel, right children panel)
-            ├── SignIn.js         Login form → POST /login → navigate("/sets"). Google/Facebook/Apple buttons are non-functional
-            ├── SignUp.js         Register form (email, username, password, birthday via 3 react-selects) → POST /register. Google/Facebook buttons non-functional; ToS checkbox not enforced
-            ├── FlashcardSets.js  Lists the user's sets (GET /api/sets), creates a set (POST /api/sets), selects a set (POST /api/sets/select) then navigates to /sets/:setName. Unstyled
-            ├── Flashcard.js      Card grid for the selected set: click to flip, "+" modal to add a card, "Feynman" button opens a textarea → POST /evaluate → shows raw score + feedback
-            └── style/
-                ├── HomePage.css  (~540 lines)
-                ├── AuthPage.css  (~460 lines)
-                └── Flashcard.css (~150 lines)
+        ├── main.tsx / App.tsx    Router: `/` status page, 404 fallback
+        ├── api/client.ts         Single configured openapi-fetch client (`VITE_API_BASE_URL`)
+        ├── api/schema.gen.ts     Generated types, committed and drift-checked (do not hand-edit; `make gen-types`)
+        ├── pages/                `StatusPage`, `NotFoundPage` (+ tests)
+        └── assets/images/        The 7 images kept from the prototype
 ```
 
 ---
 
-## Data model (`backend/feynman_card/models.py`)
+## Data model (`api/alembic/versions/0001_users.py`, `api/src/feynman_api/models/`)
 
 ```
-Users (users)
-  id            String(32) PK  (uuid4 hex)
-  email         String(345) unique, not null
-  username      String(255) unique, not null
-  password      Text            bcrypt hash
-  dob           Date, not null
-  date_created  DateTime
+users
+  id                UUID PK
+  email             String (unbounded VARCHAR; spec §7.2 said text), not null; unique on lower(email) (index uq_users_email_lower)
+  password_hash     String, NULLABLE (so social-login users need no password)
+  email_verified_at timestamptz, nullable
+  created_at / updated_at   timestamptz, server default now()
       │ 1
-      │ N
-FlashcardSets (flashcard_sets)
-  id            String(32) PK
-  user_id       FK → users.id
-  set_name      String(255)    (unique per user, enforced in code only)
-  date_created  DateTime
-      │ 1
-      │ N
-Flashcards (flashcards)
-  id            String(32) PK
-  set_id        FK → flashcard_sets.id
-  concept       String(255)    (unique per set, enforced in code only)
-  definition    Text
-  date_created  DateTime
+      │ N   (ON DELETE CASCADE)
+auth_identities
+  id                UUID PK
+  user_id           FK → users.id
+  provider          String      ┐ unique together
+  provider_subject  String      ┘ (uq_auth_identities_provider_subject)
+  created_at        timestamptz
 ```
 
-No SQLAlchemy `relationship()`s, no cascades, no DB-level unique constraints beyond email/username. Tables are created with `db.create_all()` at import time. There are no migrations.
+No date of birth (deferred until the privacy/age-policy decision, ADR 0005). Constraint names follow an explicit naming convention. Nothing else exists yet: no sessions table, no study sets, no flashcards.
 
 ---
 
-## HTTP API (`backend/feynman_card/routes.py`)
+## HTTP API
 
-All responses are JSON. Auth is a server-side session cookie. The "current set" is also stored in the session (`session['selected_set']`), which is unusual and causes several bugs.
+All errors share one JSON shape: `{"error": {"code": str, "message": str, "details": [...] | null}}` (codes: `not_found`, `method_not_allowed`, `http_error`, `validation_error` (422, `details` = `[{loc, msg}]`), `internal_error` (500)).
 
-| Method | Path | Auth | Body | Behavior |
-|---|---|---|---|---|
-| GET | `/@me` | session | none | Returns `session['user']` or 401. **Not called by the frontend.** |
-| POST | `/register` | none | `email, username, password, birthday (YYYY-MM-DD)` | Hashes the password with bcrypt and inserts a user. Returns `{success, message}` (HTTP 200 even on failure) |
-| POST | `/login` | none | `email, password` | Verifies bcrypt and stores `user.to_dict()` in the session |
-| POST | `/logout` | none | none | `session.clear()`. **Not called by the frontend.** |
-| GET | `/api/sets` | session | none | Lists the user's sets (no card counts or cards included) |
-| POST | `/api/sets` | session | `set_name` | Creates a set |
-| POST | `/api/sets/select` | session | `set_id` | Stores the set in `session['selected_set']`. **Does not check ownership.** |
-| GET | `/api/sets/<set_name>` | session | none | Returns cards of `session['selected_set']`. **`set_name` is ignored.** Returns `[{index, concept, definition}]` with 0-based index in DB order |
-| POST | `/api/sets/<set_name>/add` | session | `concept, definition` | Adds a card to `session['selected_set']`. **`set_name` is ignored.** |
-| POST | `/evaluate` | selected set in session (does **not** check user) | `index, response, setName` | Loads cards for the selected set, picks `flashcards[index]`, and computes cosine similarity between embeddings of the response and the definition. Feedback is `"Good explanation!"` if > 0.8, else `"Try to add more details."` |
+| Method | Path | Behavior |
+|---|---|---|
+| GET | `/health` | `200 {status:"ok", db:"ok", version}`; `503 {status:"degraded", db:"error", version}` when the DB probe fails or exceeds `HEALTH_DB_TIMEOUT_SECONDS` (default 2s) |
 
-Frontend calls use the hard-coded base URL `http://127.0.0.1:5000`. CORS allows `localhost:3000` and `127.0.0.1:3000`.
+The web app calls it through the generated client and shows "API: ok / Database: ok" at `http://localhost:5173`.
 
 ---
 
-## User flow (as implemented)
+## Commands
 
-1. `/` HomePage → "Sign up for free" opens the SignUp overlay → register → switches to the SignIn tab → login → navigates to `/sets`.
-2. `/sets` → list or create sets → clicking a set calls `/api/sets/select`, then navigates to `/sets/<name>`.
-3. `/sets/<name>` → flip cards, add cards with the "+" modal, click "Feynman" on a card → type an explanation → submit → see the raw float score and the canned feedback.
+Prerequisites: `docs/setup-prerequisites.md` (Docker Engine in WSL, uv, Node 26, make, gh, gitleaks, pre-commit).
 
-There is no logout button, no route guard (the "Get Started" link goes straight to `/sets`, and unauthenticated users see an axios 401 error), no nav bar outside the homepage, and no 404 page. `/contact`, `/terms`, `/privacy`, and `/forgot-password` are linked but have no routes.
-
----
-
-## Running locally (what actually works)
-
-The README's backend steps are partly wrong. The steps below reflect the code.
-
-**Prerequisites:** Python 3.10+ (pycache shows 3.10/3.13), Node + npm, a running **MySQL** server with a database named `Illumina` already created, and a running **Redis** server.
-
-**`.env`** (not committed; place it where you run the backend, i.e. `backend/feynman_card/`):
-```
-SECRET_KEY=...
-DB_USRNAME=...        # note the misspelling, it's what config.py reads
-DB_PASSWORD=...
-DB_HOST=localhost
-REDIS_URL=redis://localhost:6379
-```
-
-**Backend:**
 ```bash
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt          # from repo root
-cd backend/feynman_card
-python routes.py                          # http://127.0.0.1:5000 (debug)
-# or: FLASK_APP=routes flask run
+make env                        # once: generate infra/.env, api/.env, web/.env (never overwrites)
+make db                         # start Postgres 18 and verify the app-role login
+make migrate                    # alembic upgrade head (as feynman_migrator)
+(cd api && uv sync)             # Python deps
+(cd web && npm ci)              # JS deps
+make api                        # uvicorn --reload on http://127.0.0.1:8000 (http://localhost:8000/health)
+make web                        # Vite dev server on http://localhost:5173
+make test | lint | check        # check = lint + test + web build + types drift check
+make gen-types                  # regenerate web/openapi.json and web/src/api/schema.gen.ts
+make db-down                    # stop Postgres (data kept)
+make db-reset                   # DELETES the local DB volume and re-creates it
+make db-psql                    # psql as feynman_migrator
 ```
-`flask run` from `backend/` (as the README says) will not find the app: there is no `app.py`/`wsgi.py`, and imports are flat. The first request that touches `methods.py` downloads and loads the BERT model, which is slow.
 
-**Frontend:**
-```bash
-cd frontend
-npm install
-npm start                                 # http://localhost:3000
-```
+Local results at the end of Phase 1: 36 pytest tests and 7 vitest tests pass; `make check` passes.
 
-**Tests / lint:** None exist. `npm test` runs CRA's jest, but there are no test files. There are no Python tests.
+### Gotchas
+- **DB tests need Postgres running** (`make db`, and `make migrate` is not required for tests; they migrate `feynman_test` themselves). If the DB is unreachable or the volume was created with other credentials, the conftest prints a hint to run `make db` / `make db-reset`.
+- `make env` creates the gitignored `.env` files. Never commit a `.env`; only `*.env.example` is tracked. If `infra/.env` is created after the DB volume exists, run `make db-reset`.
+- Compose project name is `infra` (derived from the folder holding the compose file), so the volume is `infra_feynman_pgdata`.
+- Inside the Postgres container, loopback (`127.0.0.1`/socket) is **trust-auth**; it proves nothing about passwords. Credential probes must use `-h db` (the Makefile does).
+- Use `localhost`, not `127.0.0.1`, for browser-facing URLs (CORS origin is `http://localhost:5173`). **Every** unhandled-exception 500 (including the JSON one our own handler builds) lacks CORS headers, because Starlette's `ServerErrorMiddleware` sits outside `CORSMiddleware`; the browser reports an opaque network error rather than the JSON body. A fix is tracked for Phase 2 (M1).
+- Postgres 18 images keep data under `/var/lib/postgresql/18/docker`; the volume mounts the parent `/var/lib/postgresql`.
+- TypeScript is pinned `~5.9` because `openapi-typescript` peers on it. `npm audit` reports 10 moderate dev-only advisories (minimatch via eslint); the only fix forces an ESLint downgrade and was not applied.
+- `.superpowers/` is gitignored agent scratch space: never commit or link to it.
+- CI (`.github/workflows/ci.yml`) is unverified: runs failed before any step because of a GitHub account billing lock. Re-run it once billing is resolved.
 
 ---
 
-## Known issues & gaps
+## Conventions
 
-Collected while mapping the code. Useful input for the upcoming planning session.
-
-### Backend
-- **Redis config key is wrong:** `config.py` sets `SESSION_URL`, but Flask-Session reads `SESSION_REDIS`. `REDIS_URL` is effectively ignored, and Flask-Session falls back to its default (localhost:6379).
-- **Fragile card indexing:** `/evaluate` and `GET /api/sets/<name>` identify cards by their position in an unordered `query.all()`, not by ID. The order can change between calls.
-- **Authorization holes:** `/api/sets/select` doesn't check that the set belongs to the user, and `/evaluate` doesn't check login at all.
-- **Crash:** in `get_flashcard_set`, `flashcard_set.get('id')` runs before the `None` check, so it returns a 500 if no set is selected.
-- **URL `set_name` params are ignored.** State lives in the session instead, so deep links and refreshes on `/sets/<name>` break after the session changes. Set names aren't URL-encoded either.
-- Failure responses often return HTTP 200 with `success: false` (register, create set, add card).
-- `SQLALCHEMY_ECHO=True`, many `print()` debug statements, and the session is printed to stdout.
-- No input validation (e.g. email format, password strength), no rate limiting, and no CSRF protection.
-- The model loads at module import, and `bert-base-nli-mean-tokens` is deprecated. Raw cosine similarity is a weak scoring signal (short or paraphrased answers score oddly).
-- No `relationship()`/cascades, so deleting a user or set would leave orphans. There are no delete/update endpoints at all.
-
-### Frontend
-- **Double AuthPage overlay:** HomePage wraps SignIn/SignUp in `<AuthPage>`, and SignIn/SignUp each render their own `<AuthPage>` too, so the overlay and modal are nested twice.
-- Social login buttons sit inside `<form>` without `type="button"`, so clicking them **submits the form**. The tab-switch buttons do the same.
-- `FlashcardSets.addSet` appends the new set without its `id`, so clicking a newly created set sends `set_id: undefined` until the page is refreshed. The card count always shows 0 because the API doesn't return cards.
-- `Flashcard.addFlashcard` assigns `index: length + 1`, which doesn't match the backend's 0-based index, so evaluating a newly added card targets the wrong card.
-- The Feynman `response` textarea isn't cleared between cards. `setConcept`/`setDefinition` from `selectFlashcard` pre-fill the "Add" modal by accident.
-- Hard-coded API base URL, no shared axios instance, no env config. Lots of `console.log`.
-- Uses `class=` instead of `className=` in a few JSX spots (React warnings).
-- No auth state or context, route guards, logout, or loading states. `index.html` title is "React App".
-
-### Repo hygiene
-- Committed by mistake: `.DS_Store` files, `__pycache__/`, `flask_session/`. There is no root `.gitignore`.
-- `requirements.txt` sits at the root while the README says to install from `backend/`. Dependencies are unpinned.
-- Git history is six "Initial Commit"-style commits from 2025-01-04.
+- **Git:** work on the phase branch (`phase-1-foundation`); one commit per task, Conventional Commits, authored as `ryanalmasii <ryanalmasii@gmail.com>` via `git -c user.name=... -c user.email=... commit`, pushed after each task; a draft PR at the end. Never push to or merge into `main`, never force-push or tag; the **owner is the only one who merges**. Commit only when asked.
+- **Secrets:** nothing secret in git. Config comes from env via pydantic-settings; only `.env.example` files are tracked; gitleaks runs in pre-commit and CI (run `gitleaks git --redact -v .` before pushing).
+- **Quality gates:** ruff (check + format) and mypy strict for the API; ESLint + Prettier + `tsc` for the web; `make check` before every push. Tests run against real Postgres, not mocks. Write tests first (TDD).
+- **API:** every error uses the shared JSON error shape; web code calls the API only through `web/src/api/client.ts` with generated types, and the committed `schema.gen.ts` must match `make gen-types`.
+- **LLM code:** go through the Protocols in `llm/base.py`; every call returns `Usage`; new adapters must pass the contract tests in `api/tests/llm/`.
+- **DB:** the app runs as `feynman_app` (no DDL); only Alembic runs as `feynman_migrator`. Schema changes are migrations.
+- **Decisions:** explain first, owner approves (see "Decision process" below). No silent architectural choices or unplanned dependencies.
 
 ---
-
-## Conventions observed
-
-- Backend: plain functions in `methods.py` return `{"success": bool, "message": str, ...}` dicts. Routes are thin wrappers that import methods lazily inside each handler.
-- IDs: `uuid4().hex` strings (32 chars) generated in Python.
-- Frontend: function components with hooks, one CSS file per major component under `components/style/`, and direct axios calls inside components.
 
 ## Notes for future sessions
 
-- A **planning session** is expected next to scope a first iteration toward the vision above (the Feynman tutor agent, text and voice, scoring, feedback, and PDF-to-flashcards). Treat the current code as a rough prototype.
+- The Phase 1 code is the approved foundation, pending the owner's review and merge. Next: orchestrator review of the draft PR → owner merges → Phase 2 (MVP) planning toward the vision above (tutor agent, scoring, feedback, PDF-to-flashcards).
 - **Start with [`docs/planning-handoff.md`](docs/planning-handoff.md).** It holds the detailed multi-stage scoring design, the provider, voice, embedding, and Postgres research with pricing, per-session cost estimates, and the list of open decisions for the owner.
 
 ### Phase order (decided)
@@ -247,14 +196,15 @@ If you see a `[handoff-hook]` note in your context, follow it as described here.
 ### Decision process (owner's rule)
 **Every design decision must be explained before implementation, and the owner has the final say.** For each choice (stack, provider, schema, auth, hosting), present the options, the trade-offs, and a recommendation with reasoning. Then wait for approval before writing code that depends on it. Don't make silent architectural choices.
 
-### Direction agreed so far (not yet implemented)
-- **Stack:** a full stack change is allowed. Pick whatever fits the design best (streaming chat, voice, document ingestion), but justify it first.
-- **Database:** leaning towards **PostgreSQL**. The goal is the most secure, minimal setup: a least-privilege app role, no superuser in the app, TLS, secrets in env vars rather than code, and only the extensions that are actually needed (e.g. evaluate `pgvector` only if embeddings are stored). Whether Redis is still needed is an open question.
+### Direction agreed so far
+Infrastructure decisions are now recorded as ADRs in `docs/adr/` (stack, database, auth, config, LLM layer, jobs, tooling, git); those supersede the earlier leanings below. Scoring and product direction remain proposals in `docs/planning-handoff.md`.
+- **Stack:** decided in ADRs 0001-0003: FastAPI (Python 3.13) + Vite React TS, layout `api/ web/ infra/ docs/`.
+- **Database:** decided in ADR 0004: PostgreSQL 18 with least-privilege migrator/app roles, secrets in env vars. Redis is not used (sessions will live in Postgres, ADR 0005). Add `pgvector` only if embeddings are stored.
 - **Scoring is multi-stage:**
   1. **Baseline score:** a cheap, deterministic, objective measure of how closely the explanation matches the source material (e.g. embedding similarity or key-concept coverage).
   2. **AI-graded score(s):** an LLM judges the explanation against the source on things like accuracy, completeness, clarity, and misconceptions.
   3. **Final result:** combine both, so the AI's subjective judgement is anchored to the objective baseline. Then generate actionable feedback from the conversation.
-  - The full proposal is in `docs/planning-handoff.md` §2: a Knowledge Map, claim extraction, a baseline, an evidence-quoted rubric judge, asymmetric-band reconciliation, and calibration. It is a proposal awaiting owner approval.
+  - The full proposal is in `docs/planning-handoff.md` §2: a Knowledge Map, claim extraction, a baseline, an evidence-quoted rubric judge, asymmetric-band reconciliation, and calibration. It is a proposal awaiting owner approval (scoring parameters are Phase 2 decisions).
 - **"Illumina"** was just the name of the old MySQL database. It is not a product, dependency, or external system and can be dropped.
 
 ### Research status

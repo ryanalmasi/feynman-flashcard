@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in infra/.env (run make env)}
+      MIGRATOR_PASSWORD: ${MIGRATOR_PASSWORD:?set in infra/.env (run make env)}
+      APP_PASSWORD: ${APP_PASSWORD:?set in infra/.env (run make env)}
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      # Postgres 18 keeps PGDATA at /var/lib/postgresql/18/docker, so mount the parent.
+      - feynman_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  feynman_pgdata:

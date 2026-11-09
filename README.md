@@ -1,85 +1,57 @@
 # feynman-flashcard
 
-The Feynman Flashcard Application is a dynamic tool designed to help users create, organize, and evaluate their understanding of concepts using the Feynman technique. The application integrates a **Flask backend** with a **React frontend** to provide a seamless and engaging user experience.
-
-## Features
-
-- **Create and Manage Flashcards**: Users can create flashcard sets and individual flashcards.
-- **Feynman Evaluation**: Apply the Feynman technique to evaluate your understanding by explaining concepts in your own words.
-- **User Authentication**: Secure login and registration features.
-- **Responsive UI**: Built with React for a user-friendly and intuitive interface.
-
----
+A study tool built around the Feynman technique: you teach a topic to an AI, get a multi-stage score and feedback, and review flashcards generated from your material.
+Today the repo holds the **Phase 1 foundation only** (FastAPI + Postgres + Vite React TS skeleton with a health check); the product features come in Phase 2.
 
 ## Prerequisites
 
-Ensure you have the following installed:
-- **Python 3.8 or higher**
-- **Node.js and npm**
-- **Git**
+Machine setup (WSL, Docker Engine, uv, Node 26, make, gh, gitleaks, pre-commit) is in [`docs/setup-prerequisites.md`](docs/setup-prerequisites.md). Its last step must print `ALL PREREQUISITES OK`.
 
----
+## First-time setup
 
-## Installation and Setup
+From the repo root:
 
-Follow these steps to get the application up and running:
-
-## Step 1. Clone the Repository
 ```bash
-git clone <repository-url>
-cd <repository-folder>
+make env                # generate gitignored .env files with random dev passwords
+make db                 # start Postgres 18 in Docker
+make migrate            # apply database migrations
+(cd api && uv sync)     # install Python dependencies
+(cd web && npm ci)      # install JavaScript dependencies
 ```
 
-## Step 2. Backend Setup (Flask)
-### 1. Navigate to the backend directory:
+## Daily use
+
 ```bash
-cd backend
+make db     # start the database (if not running)
+make api    # API on http://127.0.0.1:8000
+make web    # web app on http://localhost:5173
 ```
 
-### 2. Create a Python virtual environment:
+- Web app: <http://localhost:5173> (shows "API: ok" and "Database: ok" when everything is wired up)
+- API health check: <http://localhost:8000/health>
+
+Use `localhost` (not `127.0.0.1`) for the web app, because the API's CORS origin is `http://localhost:5173`.
+
+## Checks
+
 ```bash
-python3 -m venv venv
+make check      # lint, tests, web build, and generated-types drift check
 ```
 
-### 3. Activate Virtual Environment
-**On macOS/Linux**: 
-```bash source 
-venv/bin/activate
-```
-**Windows**: 
-```bash
-venv\Scripts\activate
-```
+`make check` needs the database running (`make db` first): the pytest DB tests fail otherwise.
 
-### 4. Install the required Python dependencies:
-```bash
-pip install -r requirements.txt
-```
+CI (`.github/workflows/ci.yml`) runs the same checks plus secret scanning. **CI status: pending.** The workflow has not run successfully yet because of a GitHub account billing lock; it needs a re-run once that is resolved.
 
-### 5. Run the Flask development server:
-```bash
-flask run
-```
+`make db-reset` stops Postgres and **deletes the local database volume (all local DB data is lost)**, then recreates it. Use it only if the DB was created with different credentials or you want a clean slate.
 
-The backend will start running at http://127.0.0.1:5000.
+Other targets: `make test`, `make lint`, `make gen-types`, `make db-down`, `make db-psql`.
 
-## Step 3. Frontend Setup (React)
-### 1. Navigate to the frontend directory:
-```bash
-cd ../frontend
-```
+## Where decisions live
 
-### 2. Install the required npm packages:
-```bash
-npm install
-```
+Architecture decisions are recorded as ADRs in [`docs/adr/`](docs/adr/README.md). The roadmap and open decisions are in [`docs/planning-handoff.md`](docs/planning-handoff.md); the Phase 1 plan is [`docs/implementation-plan.md`](docs/implementation-plan.md). Project state is in [`memory.md`](memory.md) and contributor/agent guidance in [`CLAUDE.md`](CLAUDE.md).
 
-### 3. Start the React development server:
-```bash
-npm start
-```
+The Jan-2025 prototype is in git history at `5aba556`.
 
-The frontend will start running at http://127.0.0.1:3000.
+## License
 
-## Step 4. Development Observations
-You may observe changes to the web applications by navigating to http://127.0.0.1:3000.
+MIT, see [`LICENSE`](LICENSE).

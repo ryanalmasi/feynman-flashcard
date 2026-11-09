@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "CI throwaway passwords"
+regexes = ['''ci-(postgres|migrator|app)''']
