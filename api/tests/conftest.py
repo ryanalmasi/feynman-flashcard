@@ -1,6 +1,8 @@
 import os
 from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import asyncpg  # type: ignore[import-untyped]
 import httpx
@@ -9,14 +11,31 @@ from alembic.config import Config
 from asgi_lifespan import LifespanManager
 from dotenv import dotenv_values
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 
 from alembic import command
+from feynman_api.auth.breach import StaticBreachChecker
 from feynman_api.config import Settings
 from feynman_api.main import create_app
+from feynman_api.storage import LocalFileStore
 
 API_DIR = Path(__file__).resolve().parent.parent
 DB_HINT = "Test database is unreachable or not migrated. Run `make db` from the repo root first."
+
+
+class FrozenClock:
+    """Deterministic clock for tests: fixed `now`, moved only by `advance`."""
+
+    def __init__(self, now: datetime | None = None) -> None:
+        self.now = now or datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+    def advance(self, **kwargs: float) -> None:
+        self.now += timedelta(**kwargs)
+
+    def __call__(self) -> datetime:
+        return self.now
 
 
 def _env(name: str) -> str | None:
@@ -53,13 +72,34 @@ def test_settings() -> Settings:
     return Settings(
         database_url=_test_database_url(),
         environment="test",
+        hibp_enabled=False,
+        session_cookie_secure=False,
         _env_file=None,
     )
 
 
 @pytest.fixture
-def app(test_settings: Settings) -> FastAPI:
-    return create_app(test_settings)
+def file_store(tmp_path: Path) -> LocalFileStore:
+    root = tmp_path / "uploads"
+    root.mkdir()
+    return LocalFileStore(root)
+
+
+@pytest.fixture
+def clock() -> FrozenClock:
+    return FrozenClock()
+
+
+@pytest.fixture
+def app(
+    migrated_db: None, test_settings: Settings, file_store: LocalFileStore, clock: FrozenClock
+) -> FastAPI:
+    return create_app(
+        test_settings,
+        clock=clock,
+        file_store=file_store,
+        breach_checker=StaticBreachChecker({"breached-password-123"}),
+    )
 
 
 @pytest.fixture
@@ -129,3 +169,97 @@ async def app_connection(
             yield conn
     finally:
         await engine.dispose()
+
+
+async def _truncate(migration_url: str) -> None:
+    # Test-only use of the migrator: the app role has no TRUNCATE privilege.
+    engine = create_async_engine(migration_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("TRUNCATE users, jobs, rate_limit_buckets RESTART IDENTITY CASCADE")
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture
+async def clean_db(migrated_db: None, migration_url: str) -> AsyncIterator[None]:
+    """Empty the data tables before and after a test that commits data."""
+    await _truncate(migration_url)
+    try:
+        yield
+    finally:
+        await _truncate(migration_url)
+
+
+@pytest.fixture
+async def db(clean_db: None, test_settings: Settings) -> AsyncIterator[AsyncSession]:
+    """Plain feynman_app session (not rolled back), for setup rows and committed-state asserts."""
+    engine = create_async_engine(test_settings.database_url.get_secret_value())
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            yield session
+    finally:
+        await engine.dispose()
+
+
+ORIGIN = {"Origin": "http://localhost:5173"}
+
+
+async def register(
+    client: httpx.AsyncClient,
+    email: str = "a@example.com",
+    password: str = "a-long-passphrase",  # noqa: S107
+    **kw: Any,
+) -> httpx.Response:
+    body: dict[str, Any] = {
+        "email": email,
+        "password": password,
+        "birth_month": 1,
+        "birth_year": datetime.now(UTC).year - 20,
+    }
+    body.update(kw)
+    return await client.post("/auth/register", json=body, headers=ORIGIN)
+
+
+async def auth_headers(client: httpx.AsyncClient) -> dict[str, str]:
+    r = await client.get("/auth/session")
+    return ORIGIN | {"X-CSRF-Token": r.json()["csrf_token"]}
+
+
+async def _signed_in_client(app: FastAPI, email: str) -> AsyncIterator[httpx.AsyncClient]:
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await register(client, email=email)
+        assert r.status_code == 201
+        yield client
+
+
+@pytest.fixture
+async def user_client(
+    app: FastAPI, api_client: httpx.AsyncClient
+) -> AsyncIterator[httpx.AsyncClient]:
+    # api_client keeps the app lifespan running; this client has its own cookie jar.
+    async for client in _signed_in_client(app, "user@example.com"):
+        yield client
+
+
+@pytest.fixture
+async def other_user_client(
+    app: FastAPI, api_client: httpx.AsyncClient
+) -> AsyncIterator[httpx.AsyncClient]:
+    async for client in _signed_in_client(app, "other@example.com"):
+        yield client
+
+
+def walk_routes(routes: Any) -> list[APIRoute]:
+    """Every APIRoute, recursing into FastAPI's opaque `_IncludedRouter` entries."""
+    found: list[APIRoute] = []
+    for route in routes:
+        if isinstance(route, APIRoute):
+            found.append(route)
+        nested = getattr(route, "original_router", None)
+        if nested is not None:
+            found.extend(walk_routes(nested.routes))
+    return found

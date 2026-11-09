@@ -1,19 +1,19 @@
 # memory.md: running project context
 
 > **Purpose:** the repo's own record of what has happened so far, so a fresh agent session can pick up without the old conversation.
-> **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
+> **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
-**Last updated:** 2026-11-09 (Phase 1 fix-up round complete; pending orchestrator re-review, the owner's billing fix and merge)
-**Latest handoff written:** #2 (`handoff-prompts/orchestrator-handoff-2.md`), plus the implementer kickoff `handoff-prompts/implementer-phase-1.md`
+**Last updated:** 2026-11-09 (Phase 2a built, reviewed, fixed up and CI green on draft PR #2; **awaiting the owner's merge**. Next: the 2b decision round)
+**Latest handoff written:** #4 (`handoff-prompts/orchestrator/orchestrator-handoff-4.md`), plus implementer kickoffs `implementer-phase-1.md`, `implementer-phase-1-fixups.md`, `implementer-phase-2a.md`, `implementer-phase-2a-fixups.md` (and `implementer-phase-2a-resume-1.md`)
 
 ---
 
 ## 1. Project snapshot
 
 - **What it is:** a study tool built around the Feynman technique: the student teaches a topic to an AI, gets a multi-stage score and feedback, and reviews AI-generated flashcards built from their PDF or topic.
-- **What exists in code today:** the Phase 1 foundation on branch `phase-1-foundation`: FastAPI app with `GET /health`, Postgres 18 in Docker with migrator/app roles, migration `0001_users` (`users`, `auth_identities`), LLM/embedder interfaces with fakes and contract tests, a Vite React TS status page with a generated typed API client, `make` targets, pre-commit + gitleaks, and a GitHub Actions workflow (unverified, see the session log). No product features yet. `CLAUDE.md` and `README.md` describe this structure; the Jan-2025 prototype is in git history at `5aba556`.
-- **Current phase:** **Phase 1 implemented, awaiting orchestrator review of the draft PR and the owner's merge.** Then Phase 2 planning. Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
+- **What exists in code today:** the Phase 1 foundation, merged to `main` (`3185eb1`): FastAPI app with `GET /health`, Postgres 18 in Docker with migrator/app roles, migration `0001_users` (`users`, `auth_identities`), LLM/embedder interfaces with fakes and contract tests, a Vite React TS status page with a generated typed API client, `make` targets, pre-commit + gitleaks, and a GitHub Actions workflow (green). `CLAUDE.md` and `README.md` describe the current structure (including the Phase 2a additions on the 2a branch); the Jan-2025 prototype is in git history at `5aba556`.
+- **Current phase:** **Phase 1 merged (2026-11-09). Phase 2a is implemented on `phase-2a-foundations` (accounts, sets/cards, review, PDF upload + job queue + extraction), on draft PR #2: reviewed (no blocking findings), fixed up, CI green, **awaiting the owner's merge**. Phase 2 (MVP) is split into 2a/2b/2c (ADR 0012); 2b needs a decision round first.** Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
 - **Repo location (changed in session 2):** `~/code/feynman-flashcard` (WSL Linux filesystem). The old copy at `/mnt/c/Users/ryana/Documents/Github/feynman-flashcard` is **stale** and should be renamed or deleted. Don't work there.
 
 ## 2. Session log
@@ -55,8 +55,34 @@ Machine and setup decisions: **Docker Engine inside WSL** (not Docker Desktop); 
 
 **Still open (Phase 2 decisions, see the plan's Phase 2 outline):** LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling approach, job-queue library, file storage, MVP scope confirmation. Phase 3: voice, pricing/billing.
 
+### Session 3 (2026-11-09): Phase 1 review, fix-ups, merge; Phase 2 planning starts
+Model: Opus 5.5 (orchestrator). No application code written by the orchestrator.
+
+**Completed**
+1. Reviewed draft PR #1 task by task against the plan, spec §2–§4 and ADRs; re-ran `make check` locally (36 pytest / 7 vitest) and checked role privileges against the live DB. Verdict: conformant. Findings: F1 CI never ran (GitHub billing lock), F2 gitleaks path-allowlisted all `*.env.example`, F3 app role could CONNECT/TEMP on the `postgres` DB, F4 app role had DML on `alembic_version`, F5 health timeout untested, F6 status page treated any error body as a health body, F7 500s carry no CORS headers (deferred to Phase 2 M1), F8 hygiene.
+2. Wrote `handoff-prompts/implementer/fixup/implementer-phase-1-fixups.md`; the owner approved all fixes. A Sonnet implementer did F2–F6 + F8 (entry below). Orchestrator re-review: clean; `make check` 40 pytest / 8 vitest; action SHAs verified against their tags.
+3. The owner fixed the GitHub billing lock (the $0 "usage blocked" budgets were not the cause; it was an account-level lock). CI re-run **42547339617 green** on `ff0ae19`: api 16/16, web 17/17, secrets 6/6 steps (https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42547339617).
+4. **The owner merged PR #1 on 2026-11-09 (squash merge → `3185eb1` on `main`).** The per-task commits remain on the `phase-1-foundation` branch and in the PR.
+
+**Owner decisions:** approved fix-up scope including the new UI copy `API error (HTTP <status>)`, CI `push` trigger limited to `main`, actions pinned by SHA.
+
+5. **Phase 2 decision round (2a), each recorded as an ADR (all Accepted by the owner 2026-11-09):**
+| ADR | Decision |
+|---|---|
+| 0012 | MVP scope confirmed as planning doc §0 (generated flashcards stay in). Phase 2 split: **2a** auth + sets/cards + PDF upload/job queue (no LLM); **2b** Knowledge Map + generated cards; **2c** tutor + scoring + feedback + usage logging. Each its own branch, draft PR, owner merge |
+| 0013 | Age policy: **13+ neutral age screen** (birth month/year asked, never stored or logged); only `users.age_verified_at`. Account deletion is in 2a |
+| 0014 | UI: **Tailwind CSS 4 + shadcn/ui**; all design tokens in one file; screens use semantic token classes only; neutral theme + one accent, light mode. Owner chose this after viewing mockups, on condition it stays flexible |
+| 0015 | Job queue: **own `jobs` table + worker** (`FOR UPDATE SKIP LOCKED`, leases, backoff); not procrastinate (needs psycopg 3) or pgqueuer |
+| 0016 | Files: **local disk behind `FileStore`**, UUID keys; PDF only, 20 MB, 200 pages, text-based only; deleted with set/account |
+| 0017 | Auth details: **12-char password minimum** (owner's pick; below NIST's 15 for single-factor, recorded), max ≥ 64 (128), no composition rules; HIBP range API fail-open; Postgres-backed rate limits; per-session CSRF token + Origin check; SHA-256-hashed session tokens; 7-day idle / 30-day max; argon2-cffi |
+| 0018 | One PDF per study set; card front ≤ 500 / back ≤ 2000 plain text; `auth_sessions` vs later `study_sessions` naming; **pypdfium2**, PDF parsing only in the worker |
+6. Wrote the **2a design** `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`. A builder-check subagent raised 5 questions: the owner answered two (upload limit enforced by a pure-ASGI body-size cap on `/documents` + byte counting; extra deps approved: `email-validator`, `sonner`, `tw-animate-css`, `radix-ui` umbrella; **not** `next-themes`, `react-hook-form`, `zod`), and the orchestrator settled three, marked in the doc as its calls (per-email lockout blocks even the correct password, successes reset it; unexpected job errors are transient and exhausting retries fails the document with a generic message, UI polling stops after 10 min; only 401 `not_authenticated` logs the user out). **The owner approved the design on 2026-11-09.**
+7. Viewed UI mockups with the owner via the brainstorming visual companion (server needed `--host 0.0.0.0` to be reachable from the Windows browser under WSL; files under gitignored `.superpowers/`).
+
+**Still open:** 2b decisions (LLM provider + models with prices re-verified, provider data-retention/training settings, Knowledge Map details, card count/style); 2c decisions (embedding model, scoring parameters τ/weights/δ/insufficient-evidence threshold, tutor prompt and session limits, feedback format, usage-data retention). Launch-time: EU 13–15 users, ToS/privacy policy wording.
+
 ### Implementation run: Phase 1 fix-ups (2026-11-09)
-Model: Sonnet 5.5 implementer (single session, no subagents), following `handoff-prompts/implementer-phase-1-fixups.md` (orchestrator session 3 review of PR #1). Scope was closed: F2-F6 and F8 only. F1 (CI billing lock) is the owner's; F7 is deferred to Phase 2.
+Model: Sonnet 5.5 implementer (single session, no subagents), following `handoff-prompts/implementer/fixup/implementer-phase-1-fixups.md` (orchestrator session 3 review of PR #1). Scope was closed: F2-F6 and F8 only. F1 (CI billing lock) is the owner's; F7 is deferred to Phase 2.
 
 | Fix | Commit | What / evidence |
 |---|---|---|
@@ -69,7 +95,7 @@ Model: Sonnet 5.5 implementer (single session, no subagents), following `handoff
 
 **Verification**
 - `make check` passes: **40 pytest** (36 + F3 +1, F4 +2, F5 +1) and **8 vitest** (7 + F6 +1); ruff, mypy strict, ESLint, Prettier, tsc, build and the types-drift check clean. `gitleaks git --redact -v .` clean. `git log --all --name-only | grep '.env'` (excluding examples): no output.
-- **CI is still NOT verified.** After the last push the runs (latest 42547257090, event `pull_request`) again failed with zero steps: "The job was not started because your account is locked due to a billing issue." Not retried; the owner must fix GitHub billing.
+- CI at the time was blocked by the GitHub billing lock (run 42547257090). **Superseded:** after the owner's billing fix, the re-run 42547339617 went green (see Session 3).
 
 **Deviations:** F3's test builds the engine from `TEST_DATABASE_URL` with the database swapped to `postgres` and walks the exception chain (SQLAlchemy wraps the asyncpg error). Otherwise none.
 
@@ -90,7 +116,7 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 
 **Verification**
 - Locally: 36 pytest tests and 7 vitest tests pass; `make check` passes (lint, test, build, types drift).
-- **CI is NOT verified.** The workflow ran twice (run ids 42543755654 and 42543763849; https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42543763849) and all three jobs failed with zero steps executed: "The job was not started because your account is locked due to a billing issue." The workflow was only statically reviewed. Assumptions untested on a real runner: the gitleaks tarball install, the Postgres service container, and the roles script over TCP. **The owner must resolve the GitHub billing issue, then re-run CI** (`gh run rerun <id>` or push a commit).
+- **CI was not verified at the time (superseded: green in run 42547339617, see Session 3).** The workflow ran twice (run ids 42543755654 and 42543763849; https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42543763849) and all three jobs failed with zero steps executed: "The job was not started because your account is locked due to a billing issue." The workflow was only statically reviewed. Assumptions untested on a real runner: the gitleaks tarball install, the Postgres service container, and the roles script over TCP. **The owner must resolve the GitHub billing issue, then re-run CI** (`gh run rerun <id>` or push a commit).
 - Owner's manual check (Task 7 step 5): the owner opened http://localhost:5173 in the Windows browser and confirmed it shows "API: ok" and "Database: ok".
 
 **Deviations from the plan (all reviewed; none change an ADR)**
@@ -110,7 +136,7 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 - `docs/planning-handoff.md` §1: only the "Old code" row was touched (adds the `5aba556` pointer).
 
 **Incomplete**
-- CI green status (billing lock, above).
+- ~~CI green status (billing lock, above).~~ **Resolved**: run 42547339617 green.
 - The draft PR is opened by the controller after the final whole-branch review.
 
 **Open items for the orchestrator/owner**
@@ -133,19 +159,144 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 - T7: stray blank line in `index.html`; no unmount test; `typescript ~5.9` in package.json (lockfile pins exact).
 - T8: ~~`push: phase-*` plus `pull_request` double-runs~~ (resolved, `3347220`); redundant `uv python install`; implicit `npm ci` dependency for `gen-types` in the web job.
 
+### Implementation run: Phase 2a (2026-11-09)
+Model: Sonnet 5.5 implementers and reviewers under a controller (subagent-driven development), plus a final whole-branch review by Opus. Plan: `docs/implementation-plan-phase-2a.md` (Tasks 0-15). Branch `phase-2a-foundations` from `main` at `3185eb1`. The controller's ledger and per-task briefs are in the gitignored `.superpowers/sdd/implementation-plan-phase-2a/` (local only); this entry is the durable summary.
+
+**Commits per task** (every task had a spec/quality review; fix rounds in italics)
+| Task | Commit(s) | Notes |
+|---|---|---|
+| 0 docs | `370d54a` | ADRs 0012-0018, design, plan; plan line with a literal test password replaced by a runtime-generated sentinel (gitleaks flagged it; no config change) |
+| 1 leftovers | `5f42968` | CORS headers on 500s, CSRF header in CORS, logging force, migration test hardening, dev-env warning |
+| 2 models/migrations | `f910470`, *`655964c`* | fix: CHECK constraint names were doubled; exact-name test |
+| 3 FileStore | `e16b547`, *`ffb9dc1`* | fix: cancellation-safe `put` |
+| 4 passwords/HIBP | `756a003` | argon2id, fail-open range check |
+| 5 sessions/rate limit/CSRF | `e415016`, *`65b614d`* | fix: error table codified in `errors.py`; framework 404 message `Not found.`; session pruning |
+| 6 auth routes | `d9ad746`, *`683aff0`* | test hardening (age month term, CSRF matrix, NFKC, dummy verify) |
+| 7 study sets/cards | `af19f8e` | owner-scoped access |
+| 8 job queue/worker | `f9dfc48`, *`13bc840`* | fix: a failing `on_failed` no longer loops forever; lease-lost rollback pinned |
+| 9 upload | `e0c5359`, *`bd1c86d`* | fix: file kept after commit; filename Cf/control chars; NUL rejected in title/description/front/back |
+| 10 extract_pdf | `d7c6ca2`, *`db541fd`* | fix: NUL stripped from extracted text; pre-commit PDF exclude narrowed |
+| 11 web foundation | `eeeed18`, *`d1504c9`* | Tailwind + shadcn, tokens, CSRF client middleware, AuthProvider; fix: `safeNext` tab/newline bypass, failed session check = signed out, class-based dark variant |
+| 12 login/register/account | `59b4b06`, *`1b02676`* | neutral age screen; test hardening |
+| 13 sets/detail/review | `c978f67` | |
+| 14 upload + polling | `a04be21` | 10-minute polling cap |
+| progress record | `0309982` | docs: progress and resume prompt |
+| Final review fixes | `32b5327` | lone-surrogate password no longer 500s; bulk delete scoped by `user_id`; SQL params hidden from logs |
+| 15 docs | this commit | README, CLAUDE.md, memory.md, planning-handoff |
+
+**Verification:** at `32b5327`, `make check` passes with **235 pytest and 98 vitest** tests; `gitleaks git --redact -v .` clean. **CI: green, run https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42573176896 (at `c1d8e42`).** Baseline after Task 0 was 40 pytest / 8 vitest.
+
+**Final whole-branch review (Opus):** no Critical findings; one Important (a lone UTF-16 surrogate in a register password caused a 500 via the argon2/HIBP encode), fixed in `32b5327` together with the bulk-delete `user_id` predicate and `hide_parameters=True`. The controller read that 4-file diff itself rather than dispatching a re-review (small, mechanical, suite green).
+
+**Owner's browser check (verbatim):** "tests pass. I faced an issue initially where I created an account and logged in, then when i logged out to log back in it said my account password was found online." Follow-up: "I dont remember the error code, not sure if one was ever shown in the form or UI". The controller's finding: the HIBP breach check exists only in `POST /auth/register` (login never calls it). The API log showed register 201, login 401 x3, register 422 x2, register 201, login 200, which reads as mistyped credentials followed by register-time `password_breached` rejections. Treated as that; **not reproduced as a bug**, so an undiagnosed login issue remains possible.
+
+**Owner decisions to confirm (not changed by the implementers):**
+1. Unauthenticated multipart requests to `/documents` make the server spool up to ~20 MiB + 64 KiB to temp disk before auth (FastAPI parses multipart before dependencies; the caller gets 413, not 401). Bounded by the middleware cap. Options: a cookie-presence precheck in the middleware, or a reverse-proxy limit at deployment.
+2. **Resolved in the fix-up round (`5d0e027`):** `DELETE /auth/account` now has a per-user failure limit (5 per 15 min, 429 `rate_limited`, checked before password verification). Previously it had none, as the plan specified.
+3. No cap on extracted PDF text size or extraction time.
+4. NUL characters are rejected in the study-set, card and upload-title schemas (approved by the controller).
+5. `on_failed` fallback deviates from design §7.6: if `on_failed` raises, the worker rolls back, logs, and commits `mark_failed` alone. A document can stay `processing` only if `on_failed` fails persistently; this is strictly better than the endless retry loop it replaced.
+
+**Deviations from the plan, with reasons**
+- Task 6: the CSRF matrix and ownership meta-test enumerate routes through a shared `walk_routes` over `app.openapi()` because FastAPI 0.162 hides included routers from `app.routes`; unknown-email logins also count toward the per-email limiter (consistent with design §7.8); the `birth_year` range check lives in the route, not the schema, because it needs the clock; the implementation was written before its tests (a test-hardening round with mutation checks followed).
+- Task 9: the upload `title` Form field is validated by hand (strip, 1-120).
+- Task 10: no PDF exclude in pre-commit (`.gitattributes` marks `*.pdf` binary), so a PDF-only commit is still scanned.
+- Task 11: `@custom-variant dark (&:is(.dark *))` added to `index.css` (shadcn convention, no `.dark` block); `tsconfig.app.json` has `types: ["node"]` globally (needed by `tokens.test.ts`).
+- Task 14: the `DocumentStatus` prop is named `document` (shadows the global; brief-mandated) and `SetDetailPage` passes `key={document.id}`.
+- Extra dependencies approved in the design: `email-validator`, `sonner`, `tw-animate-css`, `radix-ui` (not `next-themes`, `react-hook-form`, `zod`).
+
+**Incomplete / deferred (none block the PR)**
+Final reviewer's minors:
+- M1: no JSON body size cap on non-upload routes (a deployment or reverse-proxy limit is the intended answer).
+- M4: login lockout peek/hit race.
+- M5: a long row lock is held during PDF extraction.
+- M6: login 422 copy for emails like `a@b` shows "Request validation failed".
+- M7: a transient 5xx on `/auth/session` signs the user out.
+
+Per-task deferred minors (compact):
+- T1: log-level test could pre-set the root level. T2: bare `IntegrityError` in two tests; no `rate_limit_buckets` PK test. T3: chunks `aclose()` not called; double-cancel during the post-cancel wait; `close()` error masks the original.
+- T4: `test_nfkc_normalisation` partly vacuous; the 500 fail-open test does not check the log; HIBP hashes the un-normalised password. T5: float window math in `rate_limit._window`; a CSRF-failed request still touches the session; stale-delete on concurrent expiry.
+- T6: broad `IntegrityError` catch on register; registering while logged in leaves the old session valid; a test reaches `api_client._transport.app`. T7: count subquery groups over all flashcards; GET/PATCH set run two owner-scoped queries; a few 422/null-field test gaps.
+- T8: `basicConfig`+`setLevel` vs `force=True`; unknown job kind never calls `on_failed`; the test mixes host `datetime.now` with DB `now()`; only `OkHandler` is typechecked against the Protocol. T9: weak after-commit and declared-Content-Length tests; duplicate Content-Length handling; an ambiguous commit failure deletes the file (extract_pdf fails the document cleanly on a missing file).
+- T10: no upper bound on `pypdfium2`; concurrent reprocess untested. T11: global `types: ["node"]`; 401 handler on `/login` navigates to `/login?next=%2Flogin` (handled in T12).
+- T13: the review flip control lacks Enter activation/accessible name and a modifier-key guard; no state reset on `setId` change; a failed card delete does not reload; several test gaps (set-edit PATCH body, refresh-after-mutation, load-error states).
+- T14: an in-flight poll at the 10-minute mark is dropped; no abort/timeout on the poll GET; `useState(document)` ignores prop changes; a duplicate local `json()` test helper; 413/415 tests cannot distinguish the server message from the fixed string.
+
+### Implementation run: Phase 2a fix-ups (2026-11-09)
+Model: Sonnet 5.5, working directly (no subagents), after the orchestrator reviewed draft PR #2 and approved one fix (`handoff-prompts/implementer/fixup/implementer-phase-2a-fixups.md`, commit `2177c5b`).
+
+- **R3 (`5d0e027`):** failed password attempts on `DELETE /auth/account` are limited with the existing Postgres rate limiter: settings `account_delete_failure_limit` (5) and `account_delete_window_seconds` (900), key `account_delete:user:<id>`, `peek` before verification (a full window blocks even the correct password), `hit` on a wrong password, `clear` on success. The 429 is documented on the route and `schema.gen.ts` regenerated.
+- **Tests (TDD; the lockout and per-user tests failed first because the correct password still returned 204):** `test_delete_account_lockout_blocks_correct_password`, `test_delete_account_limit_is_per_user`, `test_delete_account_success_after_failures_under_limit`, and a web test "429 shows the rate-limit message and keeps the user signed in" (passed with no page change).
+- **Counts:** 238 pytest (was 235) and 99 vitest (was 98); `make check` and `gitleaks git --redact -v .` clean locally.
+- **Deviations:** none from the fix-up prompt.
+- **CI at `5d0e027`:** the `api` and `web` jobs passed. The `secrets` job failed three times (run 42579982884, attempts 1-3) at "Install gitleaks" with `curl: (22) ... error: 504` from GitHub's release download, before gitleaks ran; the URL returned 200 from the dev machine. It is a download failure, not a leak or a billing lock. The CI result for the final commit is in the PR body. **Superseded:** the orchestrator fixed the download in `cd2883b` (authenticated `gh release download`), and CI went green (run 42581239361; see Session 4).
+
+### Session 4 (2026-11-09): Phase 2a plan, implementation review, fix-up, CI fix
+Model: Opus 5.5 (orchestrator). Application code was written only by implementers, except the one CI change below (owner-requested).
+
+**Completed**
+1. Wrote **`docs/implementation-plan-phase-2a.md`** (Tasks 0-15, 8 Review Focus items each pinned to a named test). A builder-check subagent (plan only) found 3 would-fail issues: the 413 cap mechanism (FastAPI wraps non-HTTP exceptions during `request.form()` as 400), uncommitted rate-limit/session writes, and a register-page regex matching "2013". It also found 11 smaller gaps. All were fixed in the plan. Fixed two stale lines in the 2a design header (status "Approved", plan path).
+2. Wrote `handoff-prompts/implementer/phase-plan/implementer-phase-2a.md`. The owner approved the plan, the prompt and the six *(orch.)* calls:
+   - logging via `basicConfig` + root `setLevel` instead of `force=True` (`force` strips pytest's caplog handler)
+   - indigo accent (from the mockup)
+   - the fixed error-message table (plan Task 5)
+   - 20 MB = 20 MiB
+   - `DocumentSummary` gains `id` and `error_message`
+   - `make env` appends `SESSION_COOKIE_SECURE=false` to an existing `api/.env`
+3. **Reviewed draft PR #2** task by task:
+   - re-ran `make check` (235 pytest / 98 vitest)
+   - read the auth, upload, worker and ownership code
+   - **mutation-checked 4 Review Focus pins**: removing the owner filter, an always-true CSRF check, the size cap disabled, and `SKIP LOCKED` removed. Each made its pinning test fail.
+   Verdict: conformant, nothing blocking. Findings:
+   - (M) the owner's browser check was not fully closed
+   - (M) the owner's `api/.env` predated `SESSION_COOKIE_SECURE=false`
+   - (M) `DELETE /auth/account` had no attempt limit (a plan gap)
+   - (L) a broken `on_failed` leaves the document `processing`
+   - (L) unauthenticated multipart spooling before auth (bounded by the cap)
+   - (L) a 5xx on `/auth/session` signs the user out
+   - (L) the review flip control has no accessible name or Enter key
+   - (process) Task 6 code was written before its tests (later mutation-hardened)
+4. The owner chose a fix-up round for the attempt limit only. Wrote `handoff-prompts/implementer/fixup/implementer-phase-2a-fixups.md`; the implementer delivered R3 (`5d0e027`, entry above). Re-review: correct. `make check` passes with 238 pytest / 99 vitest; gitleaks is clean over 65 commits.
+5. **CI secrets job failed** (runs 42579982884 and 42580331206, 3 attempts each) at "Install gitleaks": `curl: (22) … 504`. The cause was a GitHub incident ("Increased timeouts due to surge in anonymous users"). With the owner's go-ahead, the orchestrator committed **`cd2883b` `ci: download gitleaks with an authenticated, retried request`**. It uses `gh release download` with `GH_TOKEN: ${{ github.token }}`, 3 attempts, and the sha256 check unchanged (verified locally: OK on the real file, exit 1 on a tampered copy). **CI green: run 42581239361** (https://github.com/ryanalmasi/feynman-flashcard/actions/runs/42581239361), api, web and secrets.
+6. **Owner's browser checks, closed:**
+   - The owner ran `make env`; `api/.env` now has `SESSION_COOKIE_SECURE=false`.
+   - The orchestrator confirmed from WSL that `POST /auth/register` sets `feynman_session` with `HttpOnly; Max-Age=2592000; Path=/; SameSite=lax` and no `Secure`. The owner confirmed in Chrome that the cookie is present.
+   - The earlier "password was found online" report is judged to be Chrome's password-manager breach warning, not the app. Login never calls the breach check, and the app's copy is different. It was not otherwise reproduced.
+   - The check left one throwaway `cookie-check-…@example.com` user in the local dev DB (harmless; `make db-reset` clears it).
+
+**Owner decisions:** approved the 2a plan and all *(orch.)* calls; chose fix-up option (a) for the attempt limit only (not the L items); asked for the CI change. **New standing rule:** every phase and fix-up round runs in a brand-new implementer session, so each kickoff prompt needs a named "Read these first" list and a preflight, and each plan needs a "Context for a fresh implementer" section naming the existing code to reuse (recorded in `CLAUDE.md` "Implementer sessions start cold" and in handoff #4 steps 4–5).
+
+**Still open:** PR #2 merge (owner). The 2b decisions:
+- LLM provider + models, with prices re-verified
+- provider data-retention/training settings (students may be minors)
+- Knowledge Map details
+- card count and style
+The 2c decisions as listed in the Session 3 entry. Optional later items: the L findings above and the deferred minors in the Phase 2a entry.
+
 ## 3. Repository state
 
-- **Path:** `~/code/feynman-flashcard`. **Branch:** `phase-1-foundation`, pushed to `origin`. `main` is unchanged at `e7bd5b9`.
-- **Draft PR:** https://github.com/ryanalmasi/feynman-flashcard/pull/1 (draft; not merged; owner merges after orchestrator review)
-- **Working tree:** clean after the fix-up round (head: see `git log`; all fix-up commits pushed). `.superpowers/` (agent scratch) is gitignored. `.env` files exist locally only and are gitignored.
-- **Machine:** all prerequisites in `docs/setup-prerequisites.md` are installed and verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
+- **Path:** `~/code/feynman-flashcard`. **Branch checked out:** `phase-2a-foundations` at `cd2883b`, pushed and in sync with `origin`. `main` is still at `3185eb1` (Phase 1); it has no 2a code until the owner merges PR #2.
+- **PR #1** (Phase 1): merged. **PR #2** (Phase 2a): https://github.com/ryanalmasi/feynman-flashcard/pull/2. It is **draft, open, CI green** (run 42581239361 at `cd2883b`) and reviewed with no blocking findings. **The owner merges** (and marks it ready first).
+  - The PR body's CI section still describes the failed secrets runs; the orchestrator offered to update it.
+- **Uncommitted (orchestrator session 4 handoff):** `memory.md`, `CLAUDE.md`, `docs/planning-handoff.md` (small status updates), and the new `handoff-prompts/orchestrator/orchestrator-handoff-4.md`.
+  - Recommended: commit them onto `phase-2a-foundations` before the merge, so they land in `main` with 2a.
+  - Otherwise commit them on `main` (or the 2b branch) after the merge.
+  - Only when the owner asks.
+- `.env` files exist locally only and are gitignored. The local dev DB has test users from the browser checks.
+- **Machine:** prerequisites verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
 
 ## 4. Open questions and next steps
 
-1. **Owner:** resolve the GitHub account billing lock, then re-run CI (`gh run rerun 42547257090`, or push a commit) and confirm all three jobs (api, web, secrets) go green. Until then CI is unverified.
-2. **Orchestrator:** re-review the fix-up commits (`f361004..HEAD`) and the draft PR against `docs/implementation-plan.md`, the spec, and the ADRs; triage the deferred minors above; report to the owner.
-3. **Owner:** merge the PR (only the owner merges).
-4. **Then:** Phase 2 planning (decisions listed in the plan's Phase 2 outline: LLM provider, embedding model, privacy/age policy, scoring parameters, UI styling, job queue, file storage, MVP scope).
+1. **Owner:** commit the session-4 handoff docs (see §3), mark PR #2 ready, and merge it (squash, as with PR #1). Then `git switch main && git pull`.
+2. **Next orchestrator session (#5, `handoff-prompts/orchestrator/orchestrator-handoff-4.md`):** run the **2b decision round** (ADR 0012: M4 Knowledge Map, M5 generated flashcards). Order:
+   1. LLM provider and models: re-verify prices and the data-retention/training settings; students may be minors.
+   2. Knowledge Map details (schema, editing, versions).
+   3. Card count and style.
+   4. Then the 2b design, builder check, plan (`docs/implementation-plan-phase-2b.md`) and implementer prompt, the same way as 2a.
+3. Optional backlog (only if the owner wants it, e.g. folded into 2b's first task):
+   - the session-4 L findings
+   - the deferred minors in the Phase 2a entry
+   - owner decision items 1 and 3 there (unauthenticated multipart spooling; no cap on extracted text size or time)
 
 **Caveats**
 - Library versions are not pinned in the plan by design; the lockfiles (`api/uv.lock`, `web/package-lock.json`) record what was installed.
@@ -154,6 +305,6 @@ Model: Sonnet 5.5 implementers, driven by an orchestrator/controller using subag
 
 ## 5. Handoff automation (set up in session 1)
 
-- **Skill `/handoff`** (`.claude/skills/handoff/SKILL.md`): update `memory.md` → update docs → write `handoff-prompts/orchestrator-handoff-N.md` **last** → tell the owner to start a new session.
+- **Skill `/handoff`** (`.claude/skills/handoff/SKILL.md`): update `memory.md` → update docs → write `handoff-prompts/orchestrator/orchestrator-handoff-N.md` **last** → tell the owner to start a new session.
 - **Hook** (`.claude/settings.json` → `.claude/hooks/handoff-check.py`) on `UserPromptSubmit` and `PostToolUse`: a heads-up at ≥ 250k tokens, run the handoff at ≥ 300k, and a reminder when the owner's prompt mentions a handoff. Thresholds: `HANDOFF_WARN_TOKENS` / `HANDOFF_URGENT_TOKENS`.
 - Claude Code keys sessions and private memory by folder path. After the move to `~/code`, the hook config loads from the new folder's `.claude/` automatically.

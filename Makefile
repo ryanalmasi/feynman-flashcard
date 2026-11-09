@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: env db db-down db-reset db-psql migrate api web gen-types test lint check
+.PHONY: env db db-down db-reset db-psql migrate api worker web gen-types test lint check
 
 env:
 	./scripts/dev-env.sh
@@ -28,6 +28,9 @@ migrate:
 
 api:
 	cd api && uv run uvicorn --factory feynman_api.main:create_app --reload --host 127.0.0.1 --port 8000
+
+worker:
+	cd api && uv run python -m feynman_api.worker
 
 web:
 	cd web && npm run dev

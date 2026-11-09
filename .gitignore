@@ -31,3 +31,6 @@ Thumbs.db
 
 # Controller scratch workspace
 .superpowers/
+
+# Local uploads
+api/var/

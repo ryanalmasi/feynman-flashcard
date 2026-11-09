@@ -70,7 +70,7 @@ web/src/**/*.test.ts(x)  web/src/test/setup.ts
 ### Task 0: Preflight, branch, and commit the planning docs
 
 **Files:** none created. Commits the planning session's uncommitted work:
-- untracked: `docs/adr/`, `docs/superpowers/`, `docs/implementation-plan.md`, `docs/setup-prerequisites.md`, `handoff-prompts/orchestrator-handoff-2.md`, `handoff-prompts/implementer-phase-1.md`
+- untracked: `docs/adr/`, `docs/superpowers/`, `docs/implementation-plan.md`, `docs/setup-prerequisites.md`, `handoff-prompts/orchestrator/orchestrator-handoff-2.md`, `handoff-prompts/implementer/phase-plan/implementer-phase-1.md`
 - modified: `memory.md`, `CLAUDE.md`, `docs/planning-handoff.md`
 
 - [ ] **Step 1:** `cd ~/code/feynman-flashcard`. Run the verification block from `docs/setup-prerequisites.md` §7. Expected: `ALL PREREQUISITES OK`. On any failure, **stop** and report the missing item and the setup step that fixes it.

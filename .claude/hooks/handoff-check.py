@@ -115,7 +115,7 @@ def main():
                     f"[handoff-hook] Context is at about {tokens:,} tokens (~{pct}% of the window). "
                     "Per CLAUDE.md, briefly tell the owner the session is approaching the handoff point "
                     "and offer to run the `handoff` skill (update memory.md, then docs, then write "
-                    "handoff-prompts/orchestrator-handoff-N.md LAST). Finish the current step first. "
+                    "handoff-prompts/orchestrator/orchestrator-handoff-N.md LAST). Finish the current step first. "
                     "Do not start the handoff unless the owner agrees."
                 )
                 banners.append(f"Context ~{tokens:,} tokens (~{pct}%): handoff heads-up sent to Claude.")
@@ -124,7 +124,7 @@ def main():
                     f"[handoff-hook] Context is at about {tokens:,} tokens (~{pct}% of the window), past the "
                     "handoff threshold. At the next natural stopping point (not mid-edit), invoke the "
                     "`handoff` skill: update memory.md FIRST, then any stale docs, then write the next "
-                    "handoff-prompts/orchestrator-handoff-N.md LAST. Then tell the owner to start a new "
+                    "handoff-prompts/orchestrator/orchestrator-handoff-N.md LAST. Then tell the owner to start a new "
                     "session with that file, and stop doing other work."
                 )
                 banners.append(f"Context ~{tokens:,} tokens (~{pct}%): Claude was told to run the handoff.")
@@ -136,7 +136,7 @@ def main():
             notes.append(
                 "[handoff-hook] The owner's message mentions a handoff or a new agent session. If they are "
                 "asking you to hand off, invoke the `handoff` skill now: update memory.md first, then docs, "
-                "and write handoff-prompts/orchestrator-handoff-N.md last. If they are only discussing "
+                "and write handoff-prompts/orchestrator/orchestrator-handoff-N.md last. If they are only discussing "
                 "handoffs, ignore this note."
             )
 

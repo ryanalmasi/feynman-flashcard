@@ -9,7 +9,10 @@ from feynman_api.config import Settings
 
 def create_engine(settings: Settings) -> AsyncEngine:
     return _create_async_engine(
-        settings.database_url.get_secret_value(), pool_pre_ping=True, echo=False
+        settings.database_url.get_secret_value(),
+        pool_pre_ping=True,
+        echo=False,
+        hide_parameters=True,
     )
 
 
