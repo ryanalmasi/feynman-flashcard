@@ -184,7 +184,12 @@ export default function SetDetailPage() {
         </div>
       </div>
 
-      {studySet.document && <DocumentStatus doc={studySet.document} />}
+      {studySet.document && (
+        <DocumentStatus
+          key={studySet.document.id}
+          document={studySet.document}
+        />
+      )}
 
       <section className="grid gap-3">
         <div className="flex items-center justify-between">

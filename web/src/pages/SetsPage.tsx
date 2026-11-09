@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { api, errorMessage } from "@/api/client";
 import type { components } from "@/api/schema.gen";
 import SetFormDialog from "@/components/SetFormDialog";
+import UploadPdfButton from "@/components/UploadPdfButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,8 +61,7 @@ export default function SetsPage() {
         <h1 className="text-2xl font-semibold">Your study sets</h1>
         <div className="flex gap-2">
           <Button onClick={() => setCreating(true)}>New set</Button>
-          {/* Placeholder until Task 14 replaces it with UploadPdfButton. */}
-          <Button variant="outline">Upload PDF</Button>
+          <UploadPdfButton />
         </div>
       </div>
       {loadError && (
