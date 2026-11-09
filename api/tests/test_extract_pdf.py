@@ -152,6 +152,7 @@ async def test_too_many_pages_fails_with_message(sm, ctx, file_store) -> None:  
     doc = await _doc(sm, did)
     assert doc.status == "failed"
     assert doc.error_message == MSG_TOO_MANY_PAGES
+    assert await _pages(sm, did) == []
     job = await _job(sm, jid)
     assert job.status == "failed"
     assert job.attempts == 1
@@ -218,3 +219,70 @@ def test_extraction_not_imported_by_api() -> None:
         [sys.executable, "-c", code], capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
+
+
+class _FakeTextPage:
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def get_text_range(self) -> str:
+        return self._text
+
+    def close(self) -> None:
+        pass
+
+
+class _FakePage:
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def get_textpage(self) -> _FakeTextPage:
+        return _FakeTextPage(self._text)
+
+    def close(self) -> None:
+        pass
+
+
+def _fake_pdf(texts: list[str]):  # type: ignore[no-untyped-def]
+    class FakePdf:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def __len__(self) -> int:
+            return len(texts)
+
+        def __getitem__(self, i: int) -> _FakePage:
+            return _FakePage(texts[i])
+
+        def close(self) -> None:
+            pass
+
+    return FakePdf
+
+
+async def test_nul_characters_are_stripped(sm, ctx, file_store, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    text = "ab\x00c " * 40  # 120 non-whitespace chars after stripping NULs
+    monkeypatch.setattr(
+        "feynman_api.jobs.handlers.extract_pdf.pdfium.PdfDocument", _fake_pdf([text])
+    )
+    did, jid, _ = await _setup(sm, file_store, "text.pdf")
+    assert await run_once(sm, ctx, HANDLERS) is True
+    doc = await _doc(sm, did)
+    assert doc.status == "ready"
+    pages = await _pages(sm, did)
+    assert len(pages) == 1
+    assert "\x00" not in pages[0].text
+    assert (await _job(sm, jid)).attempts == 1
+
+
+async def test_only_nul_and_whitespace_is_no_text(sm, ctx, file_store, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    text = "\x00 \n\t" * 100
+    monkeypatch.setattr(
+        "feynman_api.jobs.handlers.extract_pdf.pdfium.PdfDocument", _fake_pdf([text])
+    )
+    did, jid, _ = await _setup(sm, file_store, "text.pdf")
+    assert await run_once(sm, ctx, HANDLERS) is True
+    doc = await _doc(sm, did)
+    assert doc.status == "failed"
+    assert doc.error_message == MSG_NO_TEXT
+    assert (await _job(sm, jid)).attempts == 1

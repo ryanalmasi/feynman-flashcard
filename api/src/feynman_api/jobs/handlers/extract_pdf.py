@@ -37,7 +37,8 @@ def _extract_pages(file_store: FileStore, key: str, max_pages: int) -> list[str]
                 try:
                     textpage = page.get_textpage()
                     try:
-                        texts.append(textpage.get_text_range())
+                        # Postgres text cannot store NUL.
+                        texts.append(textpage.get_text_range().replace("\x00", ""))
                     finally:
                         textpage.close()
                 except PdfiumError:
