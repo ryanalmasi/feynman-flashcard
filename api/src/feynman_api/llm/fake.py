@@ -1,11 +1,13 @@
 """Deterministic fakes for tests. Never imported by any route."""
 
 import hashlib
+import inspect
 import math
-from collections.abc import AsyncIterator, Sequence
-from typing import Any
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from feynman_api.llm.base import (
     ChatMessage,
@@ -23,6 +25,19 @@ def _words(text: str) -> int:
     return len(text.split())
 
 
+@dataclass(frozen=True)
+class FakeCall:
+    method: Literal["stream", "structured"]
+    model: str
+    system: tuple[PromptBlock, ...]
+    messages: tuple[ChatMessage, ...]
+    schema: type[BaseModel] | None
+    max_tokens: int
+
+
+Responder = Callable[[FakeCall], dict[str, Any] | Awaitable[dict[str, Any]]]
+
+
 class FakeLLMProvider:
     def __init__(
         self,
@@ -31,6 +46,7 @@ class FakeLLMProvider:
         structured: Sequence[dict[str, Any]] = (),
         error: LLMError | None = None,
         chunk_size: int = 4,
+        responder: Responder | None = None,
     ) -> None:
         if chunk_size < 1:
             raise ValueError("chunk_size must be >= 1")
@@ -38,6 +54,8 @@ class FakeLLMProvider:
         self._structured = tuple(structured)
         self._error = error
         self._chunk_size = chunk_size
+        self._responder = responder
+        self.calls: list[FakeCall] = []
         self._reply_i = 0
         self._structured_i = 0
 
@@ -64,8 +82,10 @@ class FakeLLMProvider:
         system: Sequence[PromptBlock],
         messages: Sequence[ChatMessage],
         max_tokens: int,
-        temperature: float = 0.7,
     ) -> AsyncIterator[TextDelta | StreamDone]:
+        self.calls.append(
+            FakeCall("stream", model, tuple(system), tuple(messages), None, max_tokens)
+        )
         if self._error is not None:
             raise self._error
         reply = self._replies[self._reply_i % len(self._replies)]
@@ -82,14 +102,19 @@ class FakeLLMProvider:
         messages: Sequence[ChatMessage],
         schema: type[T],
         max_tokens: int,
-        temperature: float = 0.0,
     ) -> StructuredResult[T]:
+        call = FakeCall("structured", model, tuple(system), tuple(messages), schema, max_tokens)
+        self.calls.append(call)
         if self._error is not None:
             raise self._error
-        if not self._structured:
-            raise LLMOutputValidationError("FakeLLMProvider has no structured payloads")
-        payload = self._structured[self._structured_i % len(self._structured)]
-        self._structured_i += 1
+        if self._responder is not None:
+            produced = self._responder(call)
+            payload = await produced if inspect.isawaitable(produced) else produced
+        else:
+            if not self._structured:
+                raise LLMOutputValidationError("FakeLLMProvider has no structured payloads")
+            payload = self._structured[self._structured_i % len(self._structured)]
+            self._structured_i += 1
         try:
             value = schema.model_validate(payload)
         except ValidationError as exc:
