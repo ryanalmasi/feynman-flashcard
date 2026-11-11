@@ -162,11 +162,13 @@ async def _main(settings: Settings) -> None:
     from feynman_api.jobs import handlers as _handlers  # noqa: F401  (registers handlers)
     from feynman_api.jobs.registry import HANDLERS
 
+    # Fails here, at startup, when LLM_ENABLED is true but no key is set.
+    llm = build_llm_provider(settings)
+    # Pin AFTER the build: importing the SDK runs its own logging setup (ANTHROPIC_LOG),
+    # which would otherwise raise these loggers back to DEBUG/INFO.
     for name in _QUIET_LOGGERS:
         quiet = logging.getLogger(name)
         quiet.setLevel(max(quiet.getEffectiveLevel(), logging.WARNING))
-    # Fails here, at startup, when LLM_ENABLED is true but no key is set.
-    llm = build_llm_provider(settings)
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     engine = create_engine(settings)
     sessionmaker = create_sessionmaker(engine)

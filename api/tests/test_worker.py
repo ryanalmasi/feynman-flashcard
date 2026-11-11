@@ -28,6 +28,7 @@ from feynman_api.jobs.registry import (
     generic_failure_for,
 )
 from feynman_api.jobs.worker import run_forever, run_once
+from feynman_api.llm import FakeLLMProvider
 from feynman_api.models.job import Job
 from feynman_api.models.study_set import StudySet
 from feynman_api.models.user import User
@@ -408,6 +409,41 @@ async def test_main_pins_sdk_loggers_and_builds_llm(  # type: ignore[no-untyped-
             logging.getLogger(n).setLevel(level)
     [c] = seen
     assert c.llm is None  # LLM_ENABLED is false in test settings
+
+
+async def test_main_pins_sdk_loggers_after_provider_build(  # type: ignore[no-untyped-def]
+    test_settings: Settings, tmp_path, monkeypatch
+) -> None:
+    # Simulates the SDK's import-time setup_logging() under ANTHROPIC_LOG=debug, which sets the
+    # anthropic and httpx2 loggers to DEBUG while the provider is built. (Tests outside
+    # tests/llm/ never import the SDK, so the fake builder does what that import does.)
+    names = ("anthropic", "httpx2", "httpcore2")
+    monkeypatch.setenv("ANTHROPIC_LOG", "debug")
+
+    def fake_build(settings: Settings) -> FakeLLMProvider:
+        for n in names:
+            logging.getLogger(n).setLevel(logging.DEBUG)
+        return FakeLLMProvider()
+
+    async def fake_run_forever(sessionmaker, ctx, handlers, stop) -> None:  # type: ignore[no-untyped-def]
+        assert isinstance(ctx.llm, FakeLLMProvider)
+        for n in names:
+            assert logging.getLogger(n).getEffectiveLevel() >= logging.WARNING, n
+
+    monkeypatch.setattr(worker_module, "build_llm_provider", fake_build)
+    monkeypatch.setattr(worker_module, "run_forever", fake_run_forever)
+    test_settings.upload_dir = tmp_path / "up"
+    test_settings.llm_enabled = True
+    saved = {n: logging.getLogger(n).level for n in names}
+    try:
+        for n in names:
+            logging.getLogger(n).setLevel(logging.NOTSET)
+        await worker_module._main(test_settings)
+        for n in names:
+            assert logging.getLogger(n).getEffectiveLevel() >= logging.WARNING, n
+    finally:
+        for n, level in saved.items():
+            logging.getLogger(n).setLevel(level)
 
 
 async def test_main_fails_at_startup_without_api_key(  # type: ignore[no-untyped-def]
