@@ -10,6 +10,7 @@ from feynman_api.models.base import Base
 if TYPE_CHECKING:
     from feynman_api.models.document import Document
     from feynman_api.models.flashcard import Flashcard
+    from feynman_api.models.knowledge_map import KnowledgeMap
 
 
 class StudySet(Base):
@@ -39,6 +40,12 @@ class StudySet(Base):
         back_populates="study_set", cascade="all, delete-orphan", passive_deletes=True
     )
     document: Mapped["Document | None"] = relationship(
+        back_populates="study_set",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    knowledge_map: Mapped["KnowledgeMap | None"] = relationship(
         back_populates="study_set",
         uselist=False,
         cascade="all, delete-orphan",
