@@ -161,9 +161,13 @@ async def test_reprocessing_replaces_pages(sm, ctx, file_store) -> None:  # type
     assert await run_once(sm, ctx, HANDLERS) is True
     async with sm() as s:
         uid = (await s.execute(select(User.id))).scalar_one()
-        await enqueue(s, kind="extract_pdf", payload={"document_id": str(did)}, user_id=uid)
+        second = await enqueue(
+            s, kind="extract_pdf", payload={"document_id": str(did)}, user_id=uid
+        )
         await s.commit()
-    assert await run_once(sm, ctx, HANDLERS) is True
+    assert await run_once(sm, ctx, HANDLERS) is True  # the queued (no-op) build job
+    assert await run_once(sm, ctx, HANDLERS) is True  # the re-extraction
+    assert (await _job(sm, second.id)).status == "succeeded"
     assert len(await _pages(sm, did)) == 3
     assert (await _doc(sm, did)).status == "ready"
 
