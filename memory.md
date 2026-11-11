@@ -4,7 +4,7 @@
 > **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
-**Last updated:** 2026-11-11 (Phase 2b implementer run IN PROGRESS, Tasks 0-14 done, see "Implementation run: Phase 2b"; earlier: session 7: **2b plan and implementer kickoff approved by the owner**; G11 answered (Rebuild creates a missing map); docs commit as Task 0 of the 2b branch. Nothing committed; next: the owner starts the implementer)
+**Last updated:** 2026-11-11 (Phase 2b implementer run: Tasks 0-15 done; Task 16 Steps 4-5 (docs, this entry) written; CI proof, owner browser check and draft PR still to be filled in, see "Implementation run: Phase 2b"; earlier: session 7: 2b plan and implementer kickoff approved by the owner; G11 answered (Rebuild creates a missing map))
 **Latest handoff written:** #6 (`handoff-prompts/orchestrator/orchestrator-handoff-6.md`), plus implementer kickoffs `implementer-phase-1.md`, `implementer-phase-1-fixups.md`, `implementer-phase-2a.md`, `implementer-phase-2a-fixups.md`, `implementer-phase-2a-resume-1.md`, and **`implementer-phase-2b.md` (new, not yet approved)**
 
 ---
@@ -396,13 +396,21 @@ Model: Opus 5.5 (orchestrator). No code written, nothing committed.
 - **Owner question (handoff #5):** commit the docs on `main`, or as Task 0 of `phase-2b-ai-content`? The plan assumes Task 0, as in 2a.
 - The plan was not re-checked by a second builder pass after the fixes (they were targeted edits).
 
-### Implementation run: Phase 2b (2026-11-11, IN PROGRESS: Tasks 0-14 done, 15 and 16 left)
+### Implementation run: Phase 2b (2026-11-11, Tasks 0-15 done; Task 16 docs written, CI/browser check/PR pending)
 
-Run by an implementer session using superpowers:subagent-driven-development (fresh subagent per task + a task reviewer; fix rounds resumed the implementer). Branch `phase-2b-ai-content`, pushed after every task. Baseline 238 pytest / 99 vitest; now **470 pytest (1 skipped: the live LLM test) / 200 vitest**. gitleaks clean at every push.
+Run by an implementer session using superpowers:subagent-driven-development (fresh subagent per task + a task reviewer; fix rounds resumed the implementer). Branch `phase-2b-ai-content`, pushed after every task. Baseline 238 pytest / 99 vitest; final **470 pytest (1 skipped: the live LLM test) / 218 vitest** (T15 added 18 vitest, no API change). gitleaks clean at every push.
 
-**Commits per task:** T0 `e784fb6` (docs) · T1 `d8e6592` · T2 `24a9880` + fix `8948b07` · T3 `71fd8db` · T4 `5f175ca` + fix `77277ce` · T5 `6771955` · T6 `58d5082` + fix `2e4a1a1` · T7 `9e88337` + fix `765c5a8` · T8 `1cd5e01` · T9 `bca0ed1` + fix `f8b7ecc` · T10 `7d72ff5` · T11 `dd57146` · T12 `daa5472` + fix `ab8e3c6` · T13 `d3cfa5b` · T14 `7da5b1b`.
+**Commits per task:** T0 `e784fb6` (docs) · T1 `d8e6592` · T2 `24a9880` + fix `8948b07` · T3 `71fd8db` · T4 `5f175ca` + fix `77277ce` · T5 `6771955` · T6 `58d5082` + fix `2e4a1a1` · T7 `9e88337` + fix `765c5a8` · T8 `1cd5e01` · T9 `bca0ed1` + fix `f8b7ecc` · T10 `7d72ff5` · T11 `dd57146` · T12 `daa5472` + fix `ab8e3c6` · T13 `d3cfa5b` · T14 `7da5b1b` · T15 `0568a7a` (cloze in editor, list and review; accessible flip control).
 
-**Where to resume:** Task 15 (cloze editor, cloze rendering, review flip accessibility), then Task 16 (CI proof with `gh run watch`, the owner's manual browser check, docs, draft PR), then the whole-branch final review (most capable model).
+**Where to resume:** Task 16 Steps 2, 3 and 6 (CI proof with `gh run watch`, the owner's manual browser check, the draft PR; Steps 1, 4 and 5 are done), then the whole-branch final review (most capable model).
+
+**Task 16 placeholders to fill (the orchestrator):**
+- CI run URL: TODO(ci-url)
+- Draft PR URL: TODO(pr-url)
+- Owner's browser check, verbatim answer: TODO(owner-browser-check)
+- Usage totals of the owner's map and card jobs (`SELECT kind, result->'usage'->'total' FROM jobs WHERE kind <> 'extract_pdf'`, token counts only): TODO(owner-browser-check)
+
+**Task 15 notes:** cloze cards are edited, listed and reviewed in the web app (`ClozeText`, `CardFormDialog`, `ReviewPage`); the review flip is now a real accessible control. PATCH now always sends `kind` (correct per the API). Deferred minors: the Space/Enter double-flip guard cannot be tested in jsdom, so it goes into the owner's browser check (as does keyboard reorder of concepts and focus retention); the flip control's `aria-label` hides the card text from screen readers (brief-mandated); no `SetDetailPage.saveCard` 422 test; the Enter branch in the ReviewPage key handler is roundabout.
 The SDD ledger with every finding, ruling and deferred minor is at `.superpowers/sdd/implementation-plan-phase-2b/progress.md` (gitignored; briefs/reports/review diffs are in the same folder). If it is gone, rebuild from `git log` and this entry.
 
 **Task 2 SDK confirmations (from its report):** `anthropic` 2.8.0 depends on `httpx2` (so `httpx2.MockTransport` is correct and `httpx2` is dev-only); `anthropic.DefaultAsyncHttpxClient(transport=MockTransport)` works; `output_config.effort` accepted for `claude-sonnet-5-5` and `claude-haiku-5-5`; API version `2026-10-21`; no sampling params added by the SDK; exception names exist. Full detail in the Task 2 commit body (`24a9880`).
@@ -418,6 +426,7 @@ The SDD ledger with every finding, ruling and deferred minor is at `.superpowers
 - T10: web `SetDetailPage.tsx` (+ test) touched: regenerated types make `kind` required on add-card, so it sends `kind: "qa"`. Builder copy: "Q/A cards need an answer on the back."
 - T12: shadcn `tabs` CLI added an unapproved package `cn`; removed, `tabs.tsx` imports `@/lib/utils`. Hook fixed for setId changes mid-request.
 - T13: **`@dnd-kit/accessibility` 3.1.1 is in the lockfile** as a hard dependency of the approved `@dnd-kit/core` (cannot be removed). Accepted by the controller; **the owner should confirm** (kickoff says any other package needs the owner). Versions pinned with `~`.
+- T7/T10/T11 extras: T10 touched `SetDetailPage` (+ test) for the required `kind`; T11 generalised the subprocess test in `test_extract_pdf.py` as the brief asked; a concept deleted mid-run in a per-concept generation makes the job succeed with 0 cards (brief silent).
 - T14: builder copy: dialog title "Replace AI-generated cards?", group heading "Other", row button name "Regenerate cards for X".
 
 **Open owner questions (copy conflicts):** (1) Sets-page hint: plan says "Map: building", design §7.8 says "Map: processing"; code uses the plan's wording (one string). (2) The regenerate dialog is skipped when nothing would be replaced (brief), the design reads as if per-concept regenerate always confirms. (3) The quoted sentence gives "1 AI-generated cards" for N=1 (exact copy kept).
@@ -426,8 +435,8 @@ The SDD ledger with every finding, ruling and deferred minor is at `.superpowers
 
 ## 3. Repository state
 
-- **Path:** `~/code/feynman-flashcard`. **2b run: branch `phase-2b-ai-content` is checked out and pushed at `7da5b1b` (Tasks 0-14); no PR yet.** (Older note: `main` at `1a584b6` (Phase 2a squash merge), in sync with `origin/main`; CI green (run 42583469134). `phase-2a-foundations` is merged and can be deleted by the owner.)
-- **PRs:** #1 (Phase 1) and #2 (Phase 2a) merged. No open PRs.
+- **Path:** `~/code/feynman-flashcard`. **2b run: branch `phase-2b-ai-content` is checked out, pushed through `0568a7a` (Tasks 0-15) plus the docs commit for Task 16; draft PR: TODO(pr-url); CI: TODO(ci-url).** (Older note: `main` at `1a584b6` (Phase 2a squash merge), in sync with `origin/main`; CI green (run 42583469134). `phase-2a-foundations` is merged and can be deleted by the owner.)
+- **PRs:** #1 (Phase 1) and #2 (Phase 2a) merged. 2b draft PR: TODO(pr-url) (draft; the owner merges).
 - **Uncommitted (session 5):**
   - `docs/adr/0019-llm-provider-anthropic.md`, `0020-knowledge-map.md`, `0021-generated-flashcards.md` (new)
   - `docs/adr/0007-…` (status line), `docs/adr/README.md` (index)
@@ -444,7 +453,7 @@ The SDD ledger with every finding, ruling and deferred minor is at `.superpowers
 1. **Next orchestrator session (#7, `handoff-prompts/orchestrator/orchestrator-handoff-6.md`):**
    1. ~~Present the plan and kickoff; ask G11 and the commit location~~ **Done in session 7: approved; Rebuild creates a missing map; docs commit as Task 0.**
    2. The owner starts the implementer (`implementer-phase-2b.md`, Sonnet).
-   3. Review the 2b draft PR (task by task, Review Focus with mutation checks, anti-goals, CI) and write a fix-up prompt if the owner wants one.
+   3. ~~The owner starts the implementer~~ Done: Tasks 0-15 built. Review the 2b draft PR (task by task, Review Focus with mutation checks, anti-goals, CI) and write a fix-up prompt if the owner wants one.
 2. **After 2b:** the 2c decision round (tutor, scoring parameters, embedding model, usage logging M9, the minors safeguards for the tutor).
 3. **Optional backlog** (only if the owner asks): the session-4 L findings not folded into 2b (unauthenticated multipart spooling, a 5xx on `/auth/session` signing out) and the deferred minors in the Phase 2a entry. 2b folds in: review flip a11y, extraction row lock (M5), a broken `on_failed`, and 2a owner item 3 (the text cap).
 

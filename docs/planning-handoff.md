@@ -98,6 +98,7 @@ Full scoring robustness (§2.6–2.9), calibration and bake-off (§2.9, §3.1), 
 | Knowledge Map | **Decided (2026-11-10):** automatic after extraction; edit/add/delete/reorder; chunk + merge with resume; 2M-char cap; per-user limits ([0020](adr/0020-knowledge-map.md)). |
 | Generated flashcards | **Decided (2026-11-10):** on request; 3/2/1 by importance; Q/A + cloze; draft tray; warned regeneration ([0021](adr/0021-generated-flashcards.md)). |
 | Phase 2b status | **Design approved (2026-11-10):** `docs/superpowers/specs/2026-11-10-phase-2b-ai-content-design.md`. Plan (`docs/implementation-plan-phase-2b.md`, Tasks 0-16) and kickoff (`handoff-prompts/implementer/phase-plan/implementer-phase-2b.md`) written and builder-checked (2026-11-10), **approved by the owner 2026-11-11**. Owner answer: Rebuild creates the map for a set with a ready PDF and no map (2a sets); no backfill. |
+| Phase 2b outcome | **Built (2026-11-11), draft PR pending owner merge:** Anthropic adapter, Knowledge Map (build, edit, rebuild) and generated cards (suggested tray, cloze) per ADRs 0019-0021. 470 pytest (1 skipped live test) / 218 vitest. Deviations and results: `memory.md` "Implementation run: Phase 2b". |
 | Old "Illumina" DB name | Irrelevant; drop it. |
 
 ---
@@ -452,7 +453,7 @@ Present each with options, trade-offs and a recommendation before implementation
 **Phase tags:** P1 = must be decided in Phase 1 (architecture). P2 = needed for the MVP. P3 = can wait.
 
 - **P1: all decided 2026-11-08/09**, see ADRs 0001–0011 and §1. (#4: local embeddings, model TBD in P2. #5: auth decided; Postgres host deferred to deployment.)
-- **P2:** #8 MVP scope **decided** (ADR 0012); #7 age policy **decided** (ADR 0013), provider data retention **decided** (ADR 0019: default no retention, no training); #2 LLM provider **decided** for the MVP (ADR 0019). **Still open (needed for 2c):** #6 scoring parameters (MVP subset), the embedding model, the 2c tutor/judge models.
+- **P2:** #8 MVP scope **decided** (ADR 0012); #7 age policy **decided** (ADR 0013), provider data retention **decided** (ADR 0019: default no retention, no training); #2 LLM provider **decided** for the MVP (ADR 0019) and **built in 2b** (Anthropic adapter, Sonnet 5.5 for the map, Haiku 5.5 for cards). **Still open (needed for 2c):** #6 scoring parameters (MVP subset), the embedding model, the 2c tutor/judge models.
 - **P3:** #3 voice, #10 pricing and billing
 
 1. **Stack:** FastAPI + Vite/React (TS) vs. full-stack TypeScript.
