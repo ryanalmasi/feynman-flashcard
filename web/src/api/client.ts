@@ -67,3 +67,14 @@ export function errorMessage(
   }
   return fallback;
 }
+
+/** A 422's first detail message when present (any `loc`), else errorMessage. */
+export function validationMessage(error: unknown): string {
+  const details = (error as { error?: { details?: unknown } } | null)?.error
+    ?.details;
+  if (Array.isArray(details)) {
+    const msg = (details[0] as { msg?: unknown } | undefined)?.msg;
+    if (typeof msg === "string" && msg) return msg;
+  }
+  return errorMessage(error);
+}

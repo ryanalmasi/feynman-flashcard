@@ -2,7 +2,7 @@
 
 Guidance for Claude Code sessions in this repository. It describes what the repo **currently is**, not what it is meant to become. The product vision is covered separately below so the two don't get mixed up.
 
-> **Status (2026-11-09):** **Phase 1 (architecture foundation) is merged to `main` (PR #1, CI green). Phase 2a is built on branch `phase-2a-foundations` and is on draft PR #2: reviewed by the orchestrator (no blocking findings), fixed up, CI green; awaiting the owner's merge.** 2a has accounts (register with a 13+ age screen, login/logout, account deletion), study sets and flashcards, a review screen, PDF upload, a Postgres job queue with a worker, and PDF text extraction, with a Tailwind + shadcn web UI. There is **no LLM use yet**: no Knowledge Map, generated cards, tutor, scoring or feedback (2b/2c). Phase 2 is split into 2a/2b/2c (ADR 0012); 2a's decisions are ADRs 0012-0018 and its design is `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`. After the merge, the next step is the 2b decision round. Read `memory.md` next.
+> **Status (2026-11-11):** **Phase 1 and Phase 2a are merged to `main` (PRs #1 and #2). Phase 2b is built on branch `phase-2b-ai-content`, on a draft PR (TODO(pr-url)), pending the orchestrator review and the owner's merge; CI: TODO(ci-url).** 2b adds the Anthropic LLM adapter (worker only, off unless `LLM_ENABLED=true`), the Knowledge Map (built automatically after PDF extraction, editable, rebuildable) and generated flashcards (Q/A and cloze, suggested-card tray, warned regeneration), per ADRs 0019-0021 and `docs/superpowers/specs/2026-11-10-phase-2b-ai-content-design.md`. 2a has accounts, study sets and flashcards, a review screen, PDF upload, a Postgres job queue with a worker and PDF text extraction, with a Tailwind + shadcn web UI. Phase 2 is split into 2a/2b/2c (ADR 0012); the tutor, scoring and feedback (2c) are not built. Read `memory.md` next.
 >
 > The Jan-2025 prototype is in git history at `5aba556`.
 
@@ -30,7 +30,7 @@ A study tool built around the **Feynman technique**: after studying, the student
 | Database | PostgreSQL 18 (Docker Compose), SQLAlchemy 2 async (asyncpg), Alembic; roles `feynman_migrator` (DDL) and `feynman_app` (DML only) | 0004 |
 | Frontend | Vite, React 19, TypeScript (~5.9), React Router 8, openapi-fetch with generated types | 0002, 0009 |
 | Styling | Tailwind CSS 4 + shadcn/ui (radix-ui, sonner, tw-animate-css); tokens only in `web/src/index.css` | 0014 |
-| LLM layer | Own Protocols (`stream_chat`, `generate_structured`, `Embedder`) with `Usage` on every call; fakes only, no real provider yet (still true after 2a) | 0007 |
+| LLM layer | Own Protocols (`stream_chat`, `generate_structured`, `Embedder`) with `Usage` on every call; **Built (2b):** Anthropic adapter (`llm/anthropic.py`, built in the worker by `llm/factory.py`, SDK `anthropic` + dev-only `httpx2` mock transport), Sonnet 5.5 for the map, Haiku 5.5 for cards, `temperature` removed from the Protocol; fakes in tests | 0007, 0019 |
 | Tooling | ruff, mypy strict, pytest (real Postgres), ESLint (flat config) + Prettier, Vitest, pre-commit, gitleaks, GitHub Actions | 0006, 0009 |
 | Auth | **Built (2a):** own Postgres sessions (SHA-256-hashed tokens, HttpOnly cookie, per-session CSRF token + Origin check), argon2id, HIBP range check (fail-open), Postgres rate limits | 0005, 0013, 0017 |
 | Jobs / files / PDF | **Built (2a):** own `jobs` table + worker (`FOR UPDATE SKIP LOCKED`, leases, backoff); local-disk `FileStore`; pypdfium2 (worker only) | 0015, 0016, 0018 |
@@ -46,14 +46,15 @@ feynman-flashcard/
 ├── CLAUDE.md / memory.md / README.md / LICENSE
 ├── Makefile                      Developer entry points (see Commands)
 ├── docs/
-│   ├── adr/                      ADRs 0001-0018 + README index
-│   ├── superpowers/specs/        Phase 1 and Phase 2a design specs
+│   ├── adr/                      ADRs 0001-0021 + README index
+│   ├── superpowers/specs/        Phase 1, 2a and 2b design specs
 │   ├── implementation-plan.md    Phase 1 plan (Tasks 0-9) + Phase 2 outline (NOT FOR EXECUTION)
 │   ├── implementation-plan-phase-2a.md   Phase 2a plan (Tasks 0-15)
+│   ├── implementation-plan-phase-2b.md   Phase 2b plan (Tasks 0-16; approved)
 │   ├── planning-handoff.md       Roadmap (§0), decisions (§1), scoring design (§2), research, costs, open decisions (§5)
 │   └── setup-prerequisites.md    Machine setup (WSL, Docker, uv, Node, gh, gitleaks)
 ├── handoff-prompts/
-│   ├── orchestrator/             Numbered orchestrator handoffs (latest: #4)
+│   ├── orchestrator/             Numbered orchestrator handoffs (latest: #6)
 │   └── implementer/
 │       ├── phase-plan/           Implementer kickoffs per phase (+ resume prompts for a phase run)
 │       └── fixup/                Implementer kickoffs for fix-up rounds after a PR review
@@ -64,7 +65,7 @@ feynman-flashcard/
 ├── infra/                        docker-compose.yml (Postgres 18) + postgres/init/01-roles.sh
 ├── api/                          FastAPI project (uv)
 │   ├── pyproject.toml / uv.lock / .env.example
-│   ├── alembic/versions/         0001_users, 0002_auth_sessions_rate_limits, 0003_study_content, 0004_jobs
+│   ├── alembic/versions/         0001_users, 0002_auth_sessions_rate_limits, 0003_study_content, 0004_jobs, 0005_knowledge_maps, 0006_flashcard_generation
 │   ├── src/feynman_api/
 │   │   ├── main.py               `create_app()` factory (lifespan, CORS, body-size limit, error handlers)
 │   │   ├── config.py / db.py / clock.py / errors.py   Settings; async engine/session; injectable clock; JSON error shape, `AppError` factories
@@ -72,10 +73,11 @@ feynman-flashcard/
 │   │   ├── storage.py            `FileStore` protocol + local-disk store (UUID keys, cancellation-safe put)
 │   │   ├── worker.py             Entry point for `make worker`
 │   │   ├── auth/                 passwords (argon2id), breach (HIBP), sessions, rate_limit, csrf (+Origin check), dependencies (`current_user`), ownership (owner-scoped lookups), schemas
-│   │   ├── jobs/                 queue (enqueue/claim/lease/retry), registry, worker loop, handlers/extract_pdf.py
-│   │   ├── models/               Base, User, AuthIdentity, AuthSession, RateLimitBucket, StudySet, Flashcard, Document, DocumentPage, Job
-│   │   ├── routes/               health, auth, study_sets, flashcards, documents, schemas
-│   │   └── llm/                  `base.py` (Protocols, types), `errors.py`, `fake.py` (fakes)
+│   │   ├── jobs/                 queue (enqueue/claim/lease/retry), registry, worker loop, handlers/ (`extract_pdf`, `build_knowledge_map`, `generate_flashcards`, shared `_llm.py`)
+│   │   ├── models/               Base, User, AuthIdentity, AuthSession, RateLimitBucket, StudySet, Flashcard, Document, DocumentPage, Job, KnowledgeMap, Concept, KnowledgeMapChunk
+│   │   ├── routes/               health, auth, study_sets, flashcards (+ generate/accept/reject), documents, knowledge_maps, schemas
+│   │   ├── knowledge/            Pure Knowledge Map and card logic: limits (all caps), schemas, prompts, chunking, clean, merge, cards, cloze
+│   │   └── llm/                  `base.py` (Protocols, types), `errors.py`, `anthropic.py` (adapter), `factory.py` (`build_llm_provider`), `fake.py` (fakes)
 │   └── tests/                    pytest on real Postgres; `llm/` holds the provider contract tests
 └── web/                          Vite React TS app (npm); Tailwind 4 + shadcn/ui
     └── src/
@@ -83,8 +85,8 @@ feynman-flashcard/
         ├── api/client.ts         Single openapi-fetch client (`VITE_API_BASE_URL`), CSRF header middleware, 401 handling
         ├── api/schema.gen.ts     Generated types, committed and drift-checked (do not hand-edit; `make gen-types`)
         ├── auth/                 AuthProvider, useAuth, safeNext (redirect sanitising)
-        ├── components/           AppShell, RequireAuth, dialogs, UploadPdfButton, DocumentStatus (polling); `ui/` = shadcn components (ours to edit)
-        ├── pages/                Login, Register, Sets, SetDetail, Review, Account, Status, NotFound (+ tests)
+        ├── components/           AppShell, RequireAuth, dialogs, UploadPdfButton, DocumentStatus (polling), KnowledgeMapTab (concept list, dnd-kit reorder), ConceptFormDialog, SuggestedTab, GenerateCardsButton, RegenerateConfirmDialog, AiBadge, ClozeText; `ui/` = shadcn components (ours to edit)
+        ├── pages/                Login, Register, Sets, SetDetail, Review (flip control, cloze), Account, Status, NotFound (+ tests); SetDetail has Cards / Knowledge Map / Suggested tabs
         ├── index.css             Tailwind import and ALL design tokens (no hard-coded colors elsewhere)
         └── assets/images/        The 7 images kept from the prototype
 ```
@@ -101,7 +103,15 @@ auth_sessions        id; user_id FK CASCADE; token_hash bytea UNIQUE (SHA-256 of
                      created_at, last_seen_at, expires_at (7-day idle / 30-day max)
 rate_limit_buckets   (key, window_start) PK; count   (login/register limits, pruned on use)
 study_sets           id; user_id FK CASCADE; title (1-120); description (<=1000, nullable); timestamps
-flashcards           id; study_set_id FK CASCADE; front (1-500); back (1-2000); origin 'manual'|'generated'; timestamps
+flashcards           id; study_set_id FK CASCADE; front (1-500); back (1-2000); origin 'manual'|'generated';
+                     kind 'qa'|'cloze' (cloze: front holds `{{answer}}`); status 'suggested'|'accepted' (default accepted);
+                     edited bool; concept_id FK concepts ON DELETE SET NULL; timestamps
+knowledge_maps       id; study_set_id FK CASCADE UNIQUE; document_id FK CASCADE; status 'processing'|'ready'|'failed'; error_message;
+                     model_id; revision (bumped on every edit); cards_status 'idle'|'processing'|'failed'; cards_error_message; timestamps
+concepts             id; knowledge_map_id FK CASCADE; position (unique per map); title (1-120); explanation (1-2000);
+                     importance 'core'|'supporting'|'detail'; key_terms/misconceptions/source_pages JSONB; timestamps
+knowledge_map_chunks (knowledge_map_id FK CASCADE, chunk_index) PK; page_start/page_end; status 'pending'|'done'; result/usage JSONB
+                     (per-chunk resume state for the map build)
 documents            id; study_set_id FK CASCADE, UNIQUE (one PDF per set); storage_key UNIQUE; original_filename; size_bytes;
                      page_count; status 'processing'|'ready'|'failed'; error_message; timestamps
 document_pages       (document_id FK CASCADE, page_number) PK; text
@@ -115,7 +125,7 @@ Constraint names follow an explicit naming convention (check constraints are nam
 
 ## HTTP API
 
-All errors share one JSON shape: `{"error": {"code": str, "message": str, "details": [...] | null}}`. Codes: `not_authenticated` (401), `invalid_credentials` (401), `csrf_failed` (403), `registration_not_allowed` (403, under-13 or bad birth data), `not_found` (404; also used for other users' resources), `method_not_allowed` (405), `email_taken` (409), `file_too_large` (413), `unsupported_file_type` (415), `validation_error` (422, `details` = `[{loc, msg}]`), `password_breached` (422, register only), `rate_limited` (429, with `Retry-After`), `http_error`, `internal_error` (500; carries CORS headers).
+All errors share one JSON shape: `{"error": {"code": str, "message": str, "details": [...] | null}}`. Codes: `not_authenticated` (401), `invalid_credentials` (401), `csrf_failed` (403), `registration_not_allowed` (403, under-13 or bad birth data), `not_found` (404; also used for other users' resources), `method_not_allowed` (405), `email_taken` (409), `file_too_large` (413), `unsupported_file_type` (415), `validation_error` (422, `details` = `[{loc, msg}]`), `password_breached` (422, register only), `rate_limited` (429, with `Retry-After`), `conflict` (409, 2b: map or card generation already running, or the map is not ready), `http_error`, `internal_error` (500; carries CORS headers). Map builds and card generation count against per-user limits (`MAP_BUILD_LIMIT`, `CARD_GENERATION_LIMIT` per `LLM_LIMIT_WINDOW_SECONDS`) and answer `rate_limited` when exceeded.
 
 All routes except `/health`, `/auth/register` and `/auth/login` need the session cookie. State-changing requests also need the `X-CSRF-Token` header (value from the register/login/session response) and an allowed `Origin`.
 
@@ -129,8 +139,15 @@ All routes except `/health`, `/auth/register` and `/auth/login` need the session
 | DELETE | `/auth/account` | 204; body `{password}`; deletes the user, sets, cards, documents, jobs, sessions and files. Wrong password: 401 `invalid_credentials`; after 5 failures in 15 min (per user): 429 `rate_limited` + `Retry-After`, checked before the password |
 | GET / POST | `/study-sets` | List own sets (with card count and document summary) / create (201) |
 | GET / PATCH / DELETE | `/study-sets/{set_id}` | Owner-scoped; DELETE is 204 and removes the stored PDF |
-| GET / POST | `/study-sets/{set_id}/flashcards` | List / create a card (201) |
-| PATCH / DELETE | `/flashcards/{card_id}` | Edit / delete (204) |
+| GET / POST | `/study-sets/{set_id}/flashcards` | List (query `status=accepted` (default) or `suggested`) / create a card (201; body has `kind`, cloze needs `{{answer}}` in the front) |
+| PATCH / DELETE | `/flashcards/{card_id}` | Edit (sets `edited`, so regeneration keeps it) / delete (204) |
+| GET | `/study-sets/{set_id}/knowledge-map` | The map with ordered concepts; 404 when the set has none |
+| POST | `/study-sets/{set_id}/knowledge-map/rebuild` | 202; creates the map if a ready document has none (2a sets), else rebuilds; 409 `conflict` while processing; counts toward `MAP_BUILD_LIMIT` |
+| POST | `/study-sets/{set_id}/concepts` | Add a concept (201); only while the map is ready |
+| PATCH / DELETE | `/concepts/{concept_id}` | Edit / delete (204); bumps the map `revision`; 409 while processing |
+| PUT | `/study-sets/{set_id}/knowledge-map/order` | Reorder concepts (full ordered id list) |
+| POST | `/study-sets/{set_id}/flashcards/generate` | 202; enqueues `generate_flashcards`; body `{concept_id?}` (omit = whole set); 409 if the map is not ready or cards are already generating; counts toward `CARD_GENERATION_LIMIT` |
+| POST | `/study-sets/{set_id}/suggested-cards/accept` / `reject` | Body `{card_ids}` (null = every suggested card; max 150); accept turns suggested cards into accepted, reject deletes them |
 | POST | `/documents` | Multipart `file` (+ optional `title`); creates a NEW study set holding the PDF and returns 202 `{study_set, document}`; PDF magic check, 20 MB streaming cap; enqueues `extract_pdf`. One PDF per set |
 | GET | `/documents/{document_id}` | Status (`processing`/`ready`/`failed`, `page_count`, `error_message`) |
 
@@ -158,9 +175,13 @@ make db-reset                   # DELETES the local DB volume and re-creates it
 make db-psql                    # psql as feynman_migrator
 ```
 
-Local results at the end of Phase 2a (after the fix-up, `5d0e027`): **238 pytest and 99 vitest tests pass; `make check` passes; gitleaks clean.** CI on the 2a branch: green (run 42581239361 at `cd2883b`).
+Local results at the end of Phase 2b (`0568a7a`, Task 15): **470 pytest (1 skipped: the opt-in live LLM test) and 218 vitest tests pass.** (2a ended at 238 / 99, CI run 42581239361.) CI on the 2b branch: TODO(ci-url).
 
 ### Gotchas
+- **LLM is off by default (2b).** `LLM_ENABLED=false` in the code default and `api/.env.example`; the real `ANTHROPIC_API_KEY` goes only in the gitignored `api/.env`. Only the worker builds the provider (`build_llm_provider`); the API process never calls Claude. With it off, a map build fails with "AI features are turned off on this server." and the rest of the app works. `LLM_JOB_LEASE_SECONDS` must be >= `LLM_REQUEST_TIMEOUT_SECONDS` + 60 (checked at startup).
+- **Network guard in tests.** `tests/conftest.py` blocks every socket connect except AF_UNIX and loopback; a test that needs the network must carry `@pytest.mark.allow_network`. The one live Claude test (`tests/llm/test_anthropic_live.py`) is opt-in: `RUN_LIVE_LLM=1` plus `ANTHROPIC_API_KEY` in the environment; it never runs in CI.
+- **The worker pins the `anthropic`/`httpx2`/`httpcore2` loggers to WARNING** after the provider is built (the SDK would otherwise log PDF text at DEBUG). Keep it that way.
+- **Map edits and builds race by design:** routes lock the map row first, bump `revision`, and return 409 `conflict` while a build or card generation is running. Build and generation handlers renew their lease between steps and abort if it was lost.
 - **The worker must be running** (`make worker`) or uploaded PDFs stay `processing` until the UI's 10-minute polling gives up. It processes one job at a time with a lease (`JOB_LEASE_SECONDS`); handlers must be idempotent on reclaim.
 - **`SESSION_COOKIE_SECURE=false`** is required for plain-http local dev (`make env` writes it; the code default is `true`). Never ship it as `false`.
 - **Tests that commit** (those using the app/HTTP client or real commits) must use the `clean_db` fixture (it truncates all tables); the `db` fixture builds on it. Rate-limit and clock behaviour use the injectable `clock` fixture.
@@ -192,7 +213,7 @@ Local results at the end of Phase 2a (after the fix-up, `5d0e027`): **238 pytest
 
 ## Notes for future sessions
 
-- Phase 1 is merged; Phase 2a is built and on a draft PR. Next: the orchestrator reviews the PR and the owner merges, then the 2b decision round (LLM provider, Knowledge Map, generated cards), then 2c (tutor, scoring, feedback, usage logging). Known deferred review items are listed in `memory.md`.
+- Phase 1 and 2a are merged; 2b is built on the draft PR (ADRs 0019-0021). Next: the orchestrator's PR review (and a fix-up round if wanted), the owner's merge, then the 2c decision round (tutor, scoring, feedback, usage logging). Known deferred review items are listed in `memory.md`.
 - **Start with [`docs/planning-handoff.md`](docs/planning-handoff.md).** It holds the detailed multi-stage scoring design, the provider, voice, embedding, and Postgres research with pricing, per-session cost estimates, and the list of open decisions for the owner.
 
 ### Phase order (decided)

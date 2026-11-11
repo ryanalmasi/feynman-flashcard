@@ -74,6 +74,41 @@ describe("SetsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a Knowledge Map hint for sets that have a map", async () => {
+    const km = (status: string) => ({ status, cards_status: "idle" });
+    stubFetch({
+      "GET /auth/session": () => json(session, 200),
+      "GET /study-sets": () =>
+        json(
+          [
+            {
+              ...mk("s1", "Biology", 0, doc("ready")),
+              knowledge_map: km("processing"),
+            },
+            {
+              ...mk("s2", "History", 0, doc("ready")),
+              knowledge_map: km("ready"),
+            },
+            {
+              ...mk("s3", "Math", 0, doc("ready")),
+              knowledge_map: km("failed"),
+            },
+            { ...mk("s4", "Plain", 0, null), knowledge_map: null },
+          ],
+          200,
+        ),
+    });
+    renderAt("/sets", routes);
+    const bio = await screen.findByRole("link", { name: /Biology/ });
+    expect(within(bio).getByText("Map: building")).toBeInTheDocument();
+    const hist = screen.getByRole("link", { name: /History/ });
+    expect(within(hist).getByText("Map: ready")).toBeInTheDocument();
+    const math = screen.getByRole("link", { name: /Math/ });
+    expect(within(math).getByText("Map: failed")).toBeInTheDocument();
+    const plain = screen.getByRole("link", { name: /Plain/ });
+    expect(within(plain).queryByText(/^Map:/)).toBeNull();
+  });
+
   it("empty state text", async () => {
     stubFetch({
       "GET /auth/session": () => json(session, 200),

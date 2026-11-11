@@ -15,11 +15,12 @@ from feynman_api.llm.errors import (
     LLMRefusalError,
     LLMUnavailableError,
 )
-from feynman_api.llm.fake import FakeEmbedder, FakeLLMProvider
+from feynman_api.llm.fake import FakeCall, FakeEmbedder, FakeLLMProvider
 
 __all__ = [
     "ChatMessage",
     "Embedder",
+    "FakeCall",
     "FakeEmbedder",
     "FakeLLMProvider",
     "LLMError",

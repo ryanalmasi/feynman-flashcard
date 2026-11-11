@@ -47,7 +47,6 @@ class LLMProvider(Protocol):
         system: Sequence[PromptBlock],
         messages: Sequence[ChatMessage],
         max_tokens: int,
-        temperature: float = 0.7,
     ) -> AsyncIterator[TextDelta | StreamDone]: ...
 
     # yields zero or more TextDelta, then exactly one StreamDone, last
@@ -60,7 +59,6 @@ class LLMProvider(Protocol):
         messages: Sequence[ChatMessage],
         schema: type[T],
         max_tokens: int,
-        temperature: float = 0.0,
     ) -> StructuredResult[T]: ...
 
 

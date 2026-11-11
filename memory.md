@@ -4,16 +4,16 @@
 > **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
-**Last updated:** 2026-11-09 (Phase 2a built, reviewed, fixed up and CI green on draft PR #2; **awaiting the owner's merge**. Next: the 2b decision round)
-**Latest handoff written:** #4 (`handoff-prompts/orchestrator/orchestrator-handoff-4.md`), plus implementer kickoffs `implementer-phase-1.md`, `implementer-phase-1-fixups.md`, `implementer-phase-2a.md`, `implementer-phase-2a-fixups.md` (and `implementer-phase-2a-resume-1.md`)
+**Last updated:** 2026-11-11 (Phase 2b implementer run: Tasks 0-15 done; Task 16 Steps 4-5 (docs, this entry) written; CI proof, owner browser check and draft PR still to be filled in, see "Implementation run: Phase 2b"; earlier: session 7: 2b plan and implementer kickoff approved by the owner; G11 answered (Rebuild creates a missing map))
+**Latest handoff written:** #6 (`handoff-prompts/orchestrator/orchestrator-handoff-6.md`), plus implementer kickoffs `implementer-phase-1.md`, `implementer-phase-1-fixups.md`, `implementer-phase-2a.md`, `implementer-phase-2a-fixups.md`, `implementer-phase-2a-resume-1.md`, and **`implementer-phase-2b.md` (new, not yet approved)**
 
 ---
 
 ## 1. Project snapshot
 
 - **What it is:** a study tool built around the Feynman technique: the student teaches a topic to an AI, gets a multi-stage score and feedback, and reviews AI-generated flashcards built from their PDF or topic.
-- **What exists in code today:** the Phase 1 foundation, merged to `main` (`3185eb1`): FastAPI app with `GET /health`, Postgres 18 in Docker with migrator/app roles, migration `0001_users` (`users`, `auth_identities`), LLM/embedder interfaces with fakes and contract tests, a Vite React TS status page with a generated typed API client, `make` targets, pre-commit + gitleaks, and a GitHub Actions workflow (green). `CLAUDE.md` and `README.md` describe the current structure (including the Phase 2a additions on the 2a branch); the Jan-2025 prototype is in git history at `5aba556`.
-- **Current phase:** **Phase 1 merged (2026-11-09). Phase 2a is implemented on `phase-2a-foundations` (accounts, sets/cards, review, PDF upload + job queue + extraction), on draft PR #2: reviewed (no blocking findings), fixed up, CI green, **awaiting the owner's merge**. Phase 2 (MVP) is split into 2a/2b/2c (ADR 0012); 2b needs a decision round first.** Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
+- **What exists in code today:** Phase 1 and Phase 2a, both merged to `main` (2a at `1a584b6`: accounts, study sets/cards, review, PDF upload, job queue, extraction; see `CLAUDE.md`). Phase 1 delivered: FastAPI app with `GET /health`, Postgres 18 in Docker with migrator/app roles, migration `0001_users` (`users`, `auth_identities`), LLM/embedder interfaces with fakes and contract tests, a Vite React TS status page with a generated typed API client, `make` targets, pre-commit + gitleaks, and a GitHub Actions workflow (green). `CLAUDE.md` and `README.md` describe the current structure (including the Phase 2a additions on the 2a branch); the Jan-2025 prototype is in git history at `5aba556`.
+- **Current phase:** **Phase 1 and 2a merged. Phase 2b (Knowledge Map + generated flashcards) is decided and designed (ADRs 0019–0021, design approved 2026-11-10); its plan (`docs/implementation-plan-phase-2b.md`) and kickoff are approved (2026-11-11); the implementer run is next. 2c follows.** Phase order: 1. refactor/restructure → 2. MVP → 3. improvements (`docs/planning-handoff.md` §0).
 - **Repo location (changed in session 2):** `~/code/feynman-flashcard` (WSL Linux filesystem). The old copy at `/mnt/c/Users/ryana/Documents/Github/feynman-flashcard` is **stale** and should be renamed or deleted. Don't work there.
 
 ## 2. Session log
@@ -273,35 +273,193 @@ Model: Opus 5.5 (orchestrator). Application code was written only by implementer
 - card count and style
 The 2c decisions as listed in the Session 3 entry. Optional later items: the L findings above and the deferred minors in the Phase 2a entry.
 
+### Session 5 (2026-11-10): 2b decision round and the 2b design
+Model: Opus 5.5 (orchestrator). The session ran across two Claude Code processes (the first ended mid-builder-check); no code was written.
+
+**Completed**
+1. **State check:** PR #2 was already merged (squash `1a584b6`, 2026-11-09 08:05 UTC; main CI run 42583469134 green). The session-4 docs had been committed onto the 2a branch (`24a21f6`, `88fb885`) before the merge, so nothing was left uncommitted. Switched to `main` and pulled; `main`'s tree equals the old branch head.
+2. **Re-verified prices and policies on 2026-11-10** from official pages (sources in ADR 0019):
+   - The Anthropic prices in §3.1 hold. Sonnet 5.5 cache hits are $0.10 (the pricing page), not $0.20 as the skill table says.
+   - Anthropic does not retain prompts or outputs by default (except Fable/Mythos, the "Covered Models") and never trains on API data.
+   - OpenAI prices hold; it keeps 30-day abuse logs. Gemini's free tier uses data for training.
+   - **API version `2026-10-21` rejects `temperature`/`top_p`/`top_k` on every model** (hence the ADR 0007 amendment).
+   - `anthropic` SDK 2.7.0 (Apache-2.0) is built on `httpx2`. `@dnd-kit/core` 6.3.1 and `@dnd-kit/sortable` 10.0.0 are MIT, last released 2024-12; `@dnd-kit/react` 0.5.3 is pre-1.0.
+3. **Decision round** (each decision presented with options and a recommendation; the owner chose):
+   - **ADR 0019:**
+     - Provider: Anthropic.
+     - Models: Sonnet 5.5 for the map, Haiku 5.5 for cards (settings).
+     - `temperature` removed from the Protocol (ADR 0007 gets a status-line pointer only).
+     - Tests use fakes and a mocked transport only.
+     - `LLM_ENABLED` kill switch.
+   - **ADR 0020 (Knowledge Map):**
+     - Built automatically after extraction.
+     - Schema without prerequisites.
+     - Add/edit/delete **plus reorder** (owner's choice over the recommendation).
+     - One live map plus 2c snapshots; rebuild allowed.
+     - **Chunk + merge** (owner's choice over a single call): the LLM groups duplicates and code merges them.
+     - 2,000,000-character text cap.
+     - **Resume from saved chunk results** (owner's choice).
+     - 5 map builds / 20 card runs per user per 24 h.
+     - Usage stored in `jobs.result`.
+   - **ADR 0021 (cards):**
+     - On request.
+     - Count by importance (3/2/1) with **Q/A + cloze** (owner's choice): one `{{blank}}` per card, at most 1 cloze per concept, a manual Q/A | Cloze toggle.
+     - A **draft tray** (owner's choice over "straight in").
+     - Regeneration replaces unedited generated cards, **with a warning popup** (owner's addition).
+   - **Design Q&A:**
+     - Map lives in tabs on the set page.
+     - Reorder by drag with **@dnd-kit** (classic packages; the orchestrator's pick over the pre-1.0 `@dnd-kit/react`).
+     - No server-side refusal fallback in 2b.
+     - 2a backlog folded in: review flip a11y, extraction row lock (M5), a broken `on_failed`.
+4. **Wrote `docs/superpowers/specs/2026-11-10-phase-2b-ai-content-design.md`.**
+   - The builder check (a fresh subagent) found 7 would-fail issues: one session used by parallel tasks, lease vs. SDK retries, the PDF-specific `GENERIC_FAILURE`, the Usage mapping, contract tests that aren't provider-agnostic, LLM schemas with limits, and `rate_limit.hit` committing in routes. It also found 11 gaps.
+   - All were folded in as *(orch.)* calls; no owner decision changed.
+   - **The owner approved the design.**
+
+**Still open / caveats**
+- **Uncommitted:** ADRs 0019–0021, the ADR 0007 status line, the ADR README, the 2b design, plus this handoff's doc updates. Ask the owner whether to commit them on `main` or as the first commit (Task 0) of `phase-2b-ai-content`, as in 2a.
+- To confirm against the installed SDK in the plan's first adapter task: `anthropic.DefaultAsyncHttpxClient`, `httpx2.MockTransport`, the exact structured-output call, and that Haiku 5.5 accepts `output_config.effort`.
+- The owner needs an Anthropic Console account and API key for the manual check only.
+- Anthropic's guidelines for organisations serving minors: 2b covers AI disclosure (labels). The public compliance statement is deployment work; the tutor safeguards are a 2c design item.
+
+### Session 7 (2026-11-11): 2b plan approved
+Model: Opus 5.5 (orchestrator). No code written, nothing committed.
+
+**Completed**
+1. State check: matched handoff #6 (`origin/main` at `1a584b6`, main CI green (run 42583469134), no open PRs, exactly the 13 expected uncommitted files).
+2. Presented the plan, the kickoff, the *(orch.)* calls, the Review Focus pins and the builder-check changes. **The owner approved the plan and kickoff.**
+3. **Owner answers:**
+   - **G11 (2a sets with a ready PDF and no map): Rebuild creates the map** (option a). Applied to:
+     - design §7.3 route rules and §9 Q3
+     - plan Task 9: the missing-map branch and 5 new tests (ready → 202 with a new map + job; processing → 409; none/failed → 404; counts against the limit; cross-user 404)
+     - plan Task 12: the fourth no-map copy and the **Build Knowledge Map** button (no confirmation); the `documentStatus` prop typed
+     - plan Task 16: an optional browser-check step for a pre-2b set
+   - **Docs commit: as Task 0 of `phase-2b-ai-content`** (the plan's assumption, unchanged). The kickoff's preflight list is still exact: no file was added.
+4. No second builder check: the edits are confined to one route branch and one UI state, with their tests named. The orchestrator re-checked the names (`get_owned_set`; `documents.study_set_id` unique).
+
+**Next:** the owner starts a new Sonnet session with `handoff-prompts/implementer/phase-plan/implementer-phase-2b.md`, then the orchestrator reviews the draft PR.
+
+### Session 6 (2026-11-10): 2b implementation plan and implementer kickoff
+Model: Opus 5.5 (orchestrator). No code written, nothing committed.
+
+**Completed**
+1. **State check:** matched handoff #5 (`origin/main` at `1a584b6`, no open PRs, main CI green, run 42583469134; the same uncommitted files).
+2. Fixed two stale lines in the 2b design header: status "Approved by the owner (2026-11-10)", and the plan/kickoff paths.
+3. Re-checked the Anthropic specifics with the `claude-api` skill:
+   - Python SDK 1.x+/2.x is built on `httpx2`
+   - `DefaultAsyncHttpxClient` exists
+   - `messages.parse(..., output_format=Model)` → `.parsed_output`; `output_config.format` on `create`
+   - `output_config.effort`: Haiku 5.5 and Sonnet 5.5 accept low–max (defaults: Haiku `medium`, Sonnet `high`)
+   - API `2026-10-21` rejects `temperature`/`top_p`/`top_k`
+   - Python error classes: `RateLimitError`, `InternalServerError` (≥500), `APIStatusError`, `APIConnectionError`
+   - the skill recommends `fallbacks` for Sonnet 5.5, but the owner's Q2 keeps them off
+   Task 2 Step 1 of the plan still confirms these against the installed package.
+4. **Wrote `docs/implementation-plan-phase-2b.md`** (Tasks 0–16):
+   - Global Constraints: inherited, plus the LLM, network-guard, dependency and CI rules
+   - 13 Review Focus items, each pinned to a named test (11 starred for mutation checks)
+   - a "Context for a fresh implementer" section, names verified on `main`
+   - Interfaces → Consumes per task
+   - several *(orch.)* calls, notably:
+     - `generate_structured` streams above 16k `max_tokens`
+     - a total per-call deadline via `asyncio.timeout`
+     - `renew_lease` commits on success and rolls back on a lost lease
+     - the `failure_fallback` handler method for the `on_failed` pin
+     - fixed cloze error messages via `PydanticCustomError`
+     - the no-map copy on the map tab
+     - the merge tie rules
+     - `edited` set only when a value actually changes
+     - card results not stored for resume
+5. **Wrote `handoff-prompts/implementer/phase-plan/implementer-phase-2b.md`:**
+   - Sonnet, subagent-driven
+   - "Read these first" with named memory entries and ADRs by number
+   - a preflight with the exact `git status` list and the 238/99 baseline
+   - the owner's API key is never handled by the implementer
+6. **Builder check** (a fresh subagent; read only the plan and the code) found 9 would-fail issues and 20 gaps. **All were folded into the plan except G11 (below).** The would-fail issues:
+   - the constraint-name count was 8, not 6
+   - a deferred-constraint test can't fire inside the savepoint fixture
+   - the exact `extract_pdf` result assertion
+   - `test_reprocessing_replaces_pages` would claim the new build job first
+   - `factory.py` importing `anthropic` broke the only-adapter rule (now a builder in `llm/anthropic.py`)
+   - sync responders can't do DB work (the fake now awaits async responders)
+   - the ownership-matrix bodies would 422
+   - a missing `onReplace` prop
+   - pathname-only fetch stubs vs `?status=`
+   The main gaps fixed: the route table inline, the map-first lock order, the `map_out` helper, the exact CHECK expressions, the merge rules, the lease vs stream-timeout premise, empty-key handling, the 409-vs-limit test strength, the dnd-kit jsdom stubs, and the review arrow keys.
+
+**Still open**
+- **Owner approval** of the plan and the kickoff (not yet presented in full).
+- **Owner question (G11):** sets uploaded in 2a have a ready PDF but no Knowledge Map, and the plan gives no way to build one (rebuild with no map → 404, as designed). Options:
+  - (a) rebuild creates the map when the set has a ready document (small route change in Task 9; recommended)
+  - (b) leave 2a sets without maps; the map tab shows a "no map" message
+  - (c) a one-off backfill
+  If the owner picks (a) or (c), update Task 9 (and the no-map copy in Task 12) before the run.
+- **Owner question (handoff #5):** commit the docs on `main`, or as Task 0 of `phase-2b-ai-content`? The plan assumes Task 0, as in 2a.
+- The plan was not re-checked by a second builder pass after the fixes (they were targeted edits).
+
+### Implementation run: Phase 2b (2026-11-11, Tasks 0-15 done; Task 16 docs written, CI/browser check/PR pending)
+
+Run by an implementer session using superpowers:subagent-driven-development (fresh subagent per task + a task reviewer; fix rounds resumed the implementer). Branch `phase-2b-ai-content`, pushed after every task. Baseline 238 pytest / 99 vitest; final **470 pytest (1 skipped: the live LLM test) / 218 vitest** (T15 added 18 vitest, no API change). gitleaks clean at every push.
+
+**Commits per task:** T0 `e784fb6` (docs) · T1 `d8e6592` · T2 `24a9880` + fix `8948b07` · T3 `71fd8db` · T4 `5f175ca` + fix `77277ce` · T5 `6771955` · T6 `58d5082` + fix `2e4a1a1` · T7 `9e88337` + fix `765c5a8` · T8 `1cd5e01` · T9 `bca0ed1` + fix `f8b7ecc` · T10 `7d72ff5` · T11 `dd57146` · T12 `daa5472` + fix `ab8e3c6` · T13 `d3cfa5b` · T14 `7da5b1b` · T15 `0568a7a` (cloze in editor, list and review; accessible flip control).
+
+**Where to resume:** Task 16 Steps 2, 3 and 6 (CI proof with `gh run watch`, the owner's manual browser check, the draft PR; Steps 1, 4 and 5 are done), then the whole-branch final review (most capable model).
+
+**Task 16 placeholders to fill (the orchestrator):**
+- CI run URL: TODO(ci-url)
+- Draft PR URL: TODO(pr-url)
+- Owner's browser check, verbatim answer: TODO(owner-browser-check)
+- Usage totals of the owner's map and card jobs (`SELECT kind, result->'usage'->'total' FROM jobs WHERE kind <> 'extract_pdf'`, token counts only): TODO(owner-browser-check)
+
+**Task 15 notes:** cloze cards are edited, listed and reviewed in the web app (`ClozeText`, `CardFormDialog`, `ReviewPage`); the review flip is now a real accessible control. PATCH now always sends `kind` (correct per the API). Deferred minors: the Space/Enter double-flip guard cannot be tested in jsdom, so it goes into the owner's browser check (as does keyboard reorder of concepts and focus retention); the flip control's `aria-label` hides the card text from screen readers (brief-mandated); no `SetDetailPage.saveCard` 422 test; the Enter branch in the ReviewPage key handler is roundabout.
+The SDD ledger with every finding, ruling and deferred minor is at `.superpowers/sdd/implementation-plan-phase-2b/progress.md` (gitignored; briefs/reports/review diffs are in the same folder). If it is gone, rebuild from `git log` and this entry.
+
+**Task 2 SDK confirmations (from its report):** `anthropic` 2.8.0 depends on `httpx2` (so `httpx2.MockTransport` is correct and `httpx2` is dev-only); `anthropic.DefaultAsyncHttpxClient(transport=MockTransport)` works; `output_config.effort` accepted for `claude-sonnet-5-5` and `claude-haiku-5-5`; API version `2026-10-21`; no sampling params added by the SDK; exception names exist. Full detail in the Task 2 commit body (`24a9880`).
+
+**Deviations / rulings for the PR body:**
+- T2: structured output goes through `messages.create`/`messages.stream` with `output_config.format` (`anthropic.transform_schema`) and our own validation, not `messages.parse` (parse validates before `stop_reason` is visible, which would break the required refusal → max_tokens → validation order). Request body identical. Also: mid-stream errors are classified by their `.type`.
+- T4/T5: implementers wrote some implementation before tests; test strength was then mutation-checked and strengthened in review.
+- T4: merge system prompt's injection guard also names `<concepts>` (the merge listing carries paraphrased PDF text).
+- T6: `_main` pins the `anthropic`/`httpx2`/`httpcore2` loggers to WARNING+ **after** the provider is built (the SDK re-sets its log level on import when `ANTHROPIC_LOG` is set; DEBUG would log PDF text).
+- T7: plan premise wrong: the no-op `build_knowledge_map` handler does NOT keep `test_reprocessing_replaces_pages` exercising extraction (the second `run_once` claims the earlier build job). That one existing test was changed (extra `run_once`).
+- T8: plan Review Focus #2 typo ("retry sends only chunk 2"); the failing chunk is chunk 1, so the retry sends chunk 1 only.
+- T9: a concurrent map create returned 500 (unique violation at flush); fixed to 409 `MAP_PROCESSING` via `_flush`. Pin #10 (`hit(commit=False)` before the 409 checks) is not mutation-observable because nothing commits; the test catches a committing `hit`.
+- T10: web `SetDetailPage.tsx` (+ test) touched: regenerated types make `kind` required on add-card, so it sends `kind: "qa"`. Builder copy: "Q/A cards need an answer on the back."
+- T12: shadcn `tabs` CLI added an unapproved package `cn`; removed, `tabs.tsx` imports `@/lib/utils`. Hook fixed for setId changes mid-request.
+- T13: **`@dnd-kit/accessibility` 3.1.1 is in the lockfile** as a hard dependency of the approved `@dnd-kit/core` (cannot be removed). Accepted by the controller; **the owner should confirm** (kickoff says any other package needs the owner). Versions pinned with `~`.
+- T7/T10/T11 extras: T10 touched `SetDetailPage` (+ test) for the required `kind`; T11 generalised the subprocess test in `test_extract_pdf.py` as the brief asked; a concept deleted mid-run in a per-concept generation makes the job succeed with 0 cards (brief silent).
+- T14: builder copy: dialog title "Replace AI-generated cards?", group heading "Other", row button name "Regenerate cards for X".
+
+**Open owner questions (copy conflicts):** (1) Sets-page hint: plan says "Map: building", design §7.8 says "Map: processing"; code uses the plan's wording (one string). (2) The regenerate dialog is skipped when nothing would be replaced (brief), the design reads as if per-concept regenerate always confirms. (3) The quoted sentence gives "1 AI-generated cards" for N=1 (exact copy kept).
+
+**Deferred minors (for the final review to triage)** are listed per task in the ledger. Notable: T2 dev-env.sh append can blank a hand-set key when `LLM_ENABLED=` is missing; T7 an `extract_pdf` re-run while a map is processing would delete chunks and enqueue a second build (unreachable today); T8 chunk rows matched by index only; T11 cap-150 test seeds only edited cards (count-after-delete not pinned); T13 Edit/Delete/Add are not disabled during a reorder save and keyboard focus retention after reorder is only checkable in a browser (include it in the owner's manual check); T14 second click on an actioned suggested card can toast a 404 before the reload.
+
 ## 3. Repository state
 
-- **Path:** `~/code/feynman-flashcard`. **Branch checked out:** `phase-2a-foundations` at `cd2883b`, pushed and in sync with `origin`. `main` is still at `3185eb1` (Phase 1); it has no 2a code until the owner merges PR #2.
-- **PR #1** (Phase 1): merged. **PR #2** (Phase 2a): https://github.com/ryanalmasi/feynman-flashcard/pull/2. It is **draft, open, CI green** (run 42581239361 at `cd2883b`) and reviewed with no blocking findings. **The owner merges** (and marks it ready first).
-  - The PR body's CI section still describes the failed secrets runs; the orchestrator offered to update it.
-- **Uncommitted (orchestrator session 4 handoff):** `memory.md`, `CLAUDE.md`, `docs/planning-handoff.md` (small status updates), and the new `handoff-prompts/orchestrator/orchestrator-handoff-4.md`.
-  - Recommended: commit them onto `phase-2a-foundations` before the merge, so they land in `main` with 2a.
-  - Otherwise commit them on `main` (or the 2b branch) after the merge.
-  - Only when the owner asks.
+- **Path:** `~/code/feynman-flashcard`. **2b run: branch `phase-2b-ai-content` is checked out, pushed through `0568a7a` (Tasks 0-15) plus the docs commit for Task 16; draft PR: TODO(pr-url); CI: TODO(ci-url).** (Older note: `main` at `1a584b6` (Phase 2a squash merge), in sync with `origin/main`; CI green (run 42583469134). `phase-2a-foundations` is merged and can be deleted by the owner.)
+- **PRs:** #1 (Phase 1) and #2 (Phase 2a) merged. 2b draft PR: TODO(pr-url) (draft; the owner merges).
+- **Uncommitted (session 5):**
+  - `docs/adr/0019-llm-provider-anthropic.md`, `0020-knowledge-map.md`, `0021-generated-flashcards.md` (new)
+  - `docs/adr/0007-…` (status line), `docs/adr/README.md` (index)
+  - `docs/superpowers/specs/2026-11-10-phase-2b-ai-content-design.md` (new, approved)
+  - `memory.md`, `docs/planning-handoff.md`, `CLAUDE.md` (handoff updates)
+  - `handoff-prompts/orchestrator/orchestrator-handoff-5.md` (new)
+- **Uncommitted (session 6):** `docs/implementation-plan-phase-2b.md` (new), `handoff-prompts/implementer/phase-plan/implementer-phase-2b.md` (new), `handoff-prompts/orchestrator/orchestrator-handoff-6.md` (new), and edits to the 2b design header, `memory.md`, `CLAUDE.md`.
+  - Commit only when the owner asks (on `main`, or as Task 0 of the 2b branch). The kickoff's preflight `git status` list must be updated to include `orchestrator-handoff-6.md`, or that file committed first.
 - `.env` files exist locally only and are gitignored. The local dev DB has test users from the browser checks.
 - **Machine:** prerequisites verified. The stale `/mnt/c/...` copy should still be renamed or deleted by the owner.
 
 ## 4. Open questions and next steps
 
-1. **Owner:** commit the session-4 handoff docs (see §3), mark PR #2 ready, and merge it (squash, as with PR #1). Then `git switch main && git pull`.
-2. **Next orchestrator session (#5, `handoff-prompts/orchestrator/orchestrator-handoff-4.md`):** run the **2b decision round** (ADR 0012: M4 Knowledge Map, M5 generated flashcards). Order:
-   1. LLM provider and models: re-verify prices and the data-retention/training settings; students may be minors.
-   2. Knowledge Map details (schema, editing, versions).
-   3. Card count and style.
-   4. Then the 2b design, builder check, plan (`docs/implementation-plan-phase-2b.md`) and implementer prompt, the same way as 2a.
-3. Optional backlog (only if the owner wants it, e.g. folded into 2b's first task):
-   - the session-4 L findings
-   - the deferred minors in the Phase 2a entry
-   - owner decision items 1 and 3 there (unauthenticated multipart spooling; no cap on extracted text size or time)
+1. **Next orchestrator session (#7, `handoff-prompts/orchestrator/orchestrator-handoff-6.md`):**
+   1. ~~Present the plan and kickoff; ask G11 and the commit location~~ **Done in session 7: approved; Rebuild creates a missing map; docs commit as Task 0.**
+   2. The owner starts the implementer (`implementer-phase-2b.md`, Sonnet).
+   3. ~~The owner starts the implementer~~ Done: Tasks 0-15 built. Review the 2b draft PR (task by task, Review Focus with mutation checks, anti-goals, CI) and write a fix-up prompt if the owner wants one.
+2. **After 2b:** the 2c decision round (tutor, scoring parameters, embedding model, usage logging M9, the minors safeguards for the tutor).
+3. **Optional backlog** (only if the owner asks): the session-4 L findings not folded into 2b (unauthenticated multipart spooling, a 5xx on `/auth/session` signing out) and the deferred minors in the Phase 2a entry. 2b folds in: review flip a11y, extraction row lock (M5), a broken `on_failed`, and 2a owner item 3 (the text cap).
 
 **Caveats**
-- Library versions are not pinned in the plan by design; the lockfiles (`api/uv.lock`, `web/package-lock.json`) record what was installed.
-- Third-party prices in `docs/planning-handoff.md` §3-4 are still unverified (see session 1).
-- Postgres 18's volume layout (mount `/var/lib/postgresql`) was verified working in Task 2.
+- Library versions are not pinned in plans by design; lockfiles record what was installed.
+- Prices in `docs/planning-handoff.md` §3–4 are still the 2026-11-08 research. The Anthropic, OpenAI and Gemini rows were re-verified 2026-11-10 (ADR 0019); voice, embedding and hosting prices were not.
 
 ## 5. Handoff automation (set up in session 1)
 

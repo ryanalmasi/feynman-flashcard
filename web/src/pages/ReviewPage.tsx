@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api, errorMessage } from "@/api/client";
 import type { components } from "@/api/schema.gen";
+import ClozeText from "@/components/ClozeText";
 import { Button } from "@/components/ui/button";
 import { shuffle } from "@/lib/shuffle";
 
@@ -58,16 +59,17 @@ export default function ReviewPage() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const t = e.target;
-      if (
-        t instanceof HTMLElement &&
-        (t instanceof HTMLInputElement ||
-          t instanceof HTMLTextAreaElement ||
-          t instanceof HTMLButtonElement)
-      ) {
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) {
         return;
       }
-      if (e.key === " ") {
+      if (e.key === " " || e.key === "Enter") {
+        // A focused button handles Space and Enter itself (one press, one flip).
+        if (t instanceof HTMLButtonElement || t instanceof HTMLAnchorElement) {
+          return;
+        }
+        if (e.key === "Enter") return;
         e.preventDefault();
         setFlipped((f) => !f);
       } else if (e.key === "ArrowRight") {
@@ -129,16 +131,30 @@ export default function ReviewPage() {
       <p className="text-sm text-muted-foreground">
         Card {index + 1} of {total}
       </p>
-      <div
-        role="button"
-        tabIndex={0}
+      <button
+        type="button"
+        aria-label={flipped ? "Show question" : "Show answer"}
+        aria-pressed={flipped}
         onClick={() => setFlipped((f) => !f)}
-        className="flex min-h-48 cursor-pointer items-center justify-center rounded-xl border bg-card p-6 text-center text-card-foreground shadow-sm"
+        className="flex min-h-48 w-full cursor-pointer items-center justify-center rounded-xl border bg-card p-6 text-center text-card-foreground shadow-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
       >
-        <p className="whitespace-pre-wrap text-lg">
-          {flipped ? card.back : card.front}
-        </p>
-      </div>
+        <span className="grid gap-3 whitespace-pre-wrap text-lg">
+          {card.kind === "cloze" ? (
+            <>
+              <span>
+                <ClozeText front={card.front} reveal={flipped} />
+              </span>
+              {flipped && card.back && (
+                <span className="text-base text-muted-foreground">
+                  {card.back}
+                </span>
+              )}
+            </>
+          ) : (
+            <span>{flipped ? card.back : card.front}</span>
+          )}
+        </span>
+      </button>
       <div className="flex justify-between">
         <Button variant="outline" disabled={index === 0} onClick={() => go(-1)}>
           Previous

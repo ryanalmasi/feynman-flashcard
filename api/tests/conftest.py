@@ -1,4 +1,5 @@
 import os
+import socket
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -263,3 +264,36 @@ def walk_routes(routes: Any) -> list[APIRoute]:
         if nested is not None:
             found.extend(walk_routes(nested.routes))
     return found
+
+
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+@pytest.fixture(autouse=True)
+def _network_guard(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Block any socket connect except AF_UNIX and loopback (see the allow_network marker)."""
+    if request.node.get_closest_marker("allow_network"):
+        return
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+
+    def check(sock: socket.socket, address: Any) -> None:
+        if sock.family == socket.AF_UNIX:
+            return
+        if sock.family in (socket.AF_INET, socket.AF_INET6):
+            host = address[0] if isinstance(address, tuple) else address
+            if host in _LOOPBACK_HOSTS:
+                return
+            raise OSError(f"network access blocked in tests: {host}")
+        raise OSError(f"network access blocked in tests: {address!r}")
+
+    def guarded_connect(self: socket.socket, address: Any) -> None:
+        check(self, address)
+        return real_connect(self, address)
+
+    def guarded_connect_ex(self: socket.socket, address: Any) -> int:
+        check(self, address)
+        return real_connect_ex(self, address)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)

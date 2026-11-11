@@ -133,6 +133,7 @@ async def upload_document(
             title=study_set.title,
             description=study_set.description,
             card_count=0,
+            suggested_count=0,
             document=DocumentSummary(
                 id=doc.id,
                 status="processing",
@@ -140,6 +141,7 @@ async def upload_document(
                 original_filename=doc.original_filename,
                 error_message=None,
             ),
+            knowledge_map=None,  # extract_pdf creates the map when it finishes
             created_at=study_set.created_at,
             updated_at=study_set.updated_at,
         ),

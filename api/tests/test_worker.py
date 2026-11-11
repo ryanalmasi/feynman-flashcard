@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -13,11 +14,21 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from feynman_api.clock import system_clock
 from feynman_api.config import Settings
 from feynman_api.db import create_sessionmaker
+from feynman_api.jobs import worker as worker_module
 from feynman_api.jobs.queue import enqueue
-from feynman_api.jobs.registry import GENERIC_FAILURE, JobHandler, PermanentJobError, WorkerContext
+from feynman_api.jobs.registry import (
+    GENERIC_FAILURE,
+    JobHandler,
+    LeaseLost,
+    PermanentJobError,
+    WorkerContext,
+    generic_failure_for,
+)
 from feynman_api.jobs.worker import run_forever, run_once
+from feynman_api.llm import FakeLLMProvider
 from feynman_api.models.job import Job
 from feynman_api.models.study_set import StudySet
 from feynman_api.models.user import User
@@ -272,6 +283,241 @@ async def test_lease_lost_during_run_rolls_back_handler_writes(sm, ctx) -> None:
     assert job.status == "running"
     assert job.attempts == 2
     assert job.result is None
+
+
+async def test_lease_lost_writes_nothing(sm, ctx) -> None:  # type: ignore[no-untyped-def]
+    jid = await _job(sm)
+
+    class LosesLease(RecordingHandler):
+        async def run(
+            self, db: AsyncSession, job: Job, ctx: WorkerContext
+        ) -> dict[str, Any] | None:
+            self.runs += 1
+            db.add(StudySet(user_id=job.user_id, title="leak"))
+            await db.flush()
+            raise LeaseLost()
+
+    handler = LosesLease()
+    assert await run_once(sm, ctx, {"k": handler}) is True
+    async with sm() as s:
+        assert (await s.execute(select(StudySet))).first() is None
+    job = await _get(sm, jid)
+    assert job.status == "running"
+    assert job.attempts == 1
+    assert job.last_error is None
+    assert job.result is None
+    assert handler.runs == 1
+    assert handler.failed_messages == []
+
+
+class KindHandler(RecordingHandler):
+    generic_failure = "Kind msg."
+
+
+async def test_exhausted_retries_use_handler_generic_failure(sm, ctx) -> None:  # type: ignore[no-untyped-def]
+    jid = await _job(sm)
+    handler = KindHandler(exc=RuntimeError("boom"))
+    for _ in range(3):
+        await _make_due(sm, jid)
+        assert await run_once(sm, ctx, {"k": handler}) is True
+    job = await _get(sm, jid)
+    assert job.status == "failed"
+    assert job.last_error == "RuntimeError"
+    assert handler.failed_messages == ["Kind msg."]
+
+
+async def test_reclaimed_exhausted_uses_handler_generic_failure(sm, ctx) -> None:  # type: ignore[no-untyped-def]
+    jid = await _job(sm)
+    async with sm() as s:
+        await s.execute(
+            update(Job)
+            .where(Job.id == jid)
+            .values(
+                status="running",
+                attempts=3,
+                max_attempts=3,
+                locked_until=datetime.now(UTC) - timedelta(seconds=5),
+            )
+        )
+        await s.commit()
+    handler = KindHandler()
+    assert await run_once(sm, ctx, {"k": handler}) is True
+    job = await _get(sm, jid)
+    assert handler.runs == 0
+    assert job.status == "failed"
+    assert handler.failed_messages == ["Kind msg."]
+    assert job.last_error == "Kind msg."
+
+
+async def test_worker_context_defaults(test_settings: Settings, file_store: FileStore) -> None:
+    c = WorkerContext(settings=test_settings, file_store=file_store)
+    assert c.llm is None
+    assert c.clock is system_clock
+    assert generic_failure_for(RecordingHandler()) == GENERIC_FAILURE
+    assert generic_failure_for(KindHandler()) == "Kind msg."
+
+
+async def test_failure_fallback_runs_when_on_failed_raises(sm, ctx) -> None:  # type: ignore[no-untyped-def]
+    jid = await _job(sm)
+
+    class FallbackHandler(RecordingHandler):
+        def __init__(self) -> None:
+            super().__init__(exc=PermanentJobError("Nope."))
+            self.fallback_messages: list[str] = []
+
+        async def on_failed(self, db: AsyncSession, job: Job, user_message: str) -> None:
+            db.add(StudySet(user_id=job.user_id, title="from on_failed"))
+            await db.flush()
+            raise RuntimeError("on_failed broke")
+
+        async def failure_fallback(self, db: AsyncSession, job: Job, user_message: str) -> None:
+            self.fallback_messages.append(user_message)
+            db.add(StudySet(user_id=job.user_id, title="from fallback"))
+
+    handler = FallbackHandler()
+    assert await run_once(sm, ctx, {"k": handler}) is True
+    assert handler.fallback_messages == ["Nope."]
+    job = await _get(sm, jid)
+    assert job.status == "failed"
+    assert job.last_error == "Nope."
+    assert job.locked_until is None
+    async with sm() as s:
+        titles = (await s.execute(select(StudySet.title))).scalars().all()
+    assert titles == ["from fallback"]  # on_failed's writes rolled back, fallback's committed
+
+
+async def test_main_pins_sdk_loggers_and_builds_llm(  # type: ignore[no-untyped-def]
+    test_settings: Settings, tmp_path, monkeypatch
+) -> None:
+    seen: list[WorkerContext] = []
+
+    async def fake_run_forever(sessionmaker, ctx, handlers, stop) -> None:  # type: ignore[no-untyped-def]
+        seen.append(ctx)
+
+    monkeypatch.setattr(worker_module, "run_forever", fake_run_forever)
+    test_settings.upload_dir = tmp_path / "up"
+    names = ("anthropic", "httpx2", "httpcore2")
+    saved = {n: logging.getLogger(n).level for n in names}
+    try:
+        for n in names:
+            logging.getLogger(n).setLevel(logging.DEBUG)
+        await worker_module._main(test_settings)
+        for n in names:
+            assert logging.getLogger(n).getEffectiveLevel() >= logging.WARNING, n
+    finally:
+        for n, level in saved.items():
+            logging.getLogger(n).setLevel(level)
+    [c] = seen
+    assert c.llm is None  # LLM_ENABLED is false in test settings
+
+
+async def test_main_pins_sdk_loggers_after_provider_build(  # type: ignore[no-untyped-def]
+    test_settings: Settings, tmp_path, monkeypatch
+) -> None:
+    # Simulates the SDK's import-time setup_logging() under ANTHROPIC_LOG=debug, which sets the
+    # anthropic and httpx2 loggers to DEBUG while the provider is built. (Tests outside
+    # tests/llm/ never import the SDK, so the fake builder does what that import does.)
+    names = ("anthropic", "httpx2", "httpcore2")
+    monkeypatch.setenv("ANTHROPIC_LOG", "debug")
+
+    def fake_build(settings: Settings) -> FakeLLMProvider:
+        for n in names:
+            logging.getLogger(n).setLevel(logging.DEBUG)
+        return FakeLLMProvider()
+
+    async def fake_run_forever(sessionmaker, ctx, handlers, stop) -> None:  # type: ignore[no-untyped-def]
+        assert isinstance(ctx.llm, FakeLLMProvider)
+        for n in names:
+            assert logging.getLogger(n).getEffectiveLevel() >= logging.WARNING, n
+
+    monkeypatch.setattr(worker_module, "build_llm_provider", fake_build)
+    monkeypatch.setattr(worker_module, "run_forever", fake_run_forever)
+    test_settings.upload_dir = tmp_path / "up"
+    test_settings.llm_enabled = True
+    saved = {n: logging.getLogger(n).level for n in names}
+    try:
+        for n in names:
+            logging.getLogger(n).setLevel(logging.NOTSET)
+        await worker_module._main(test_settings)
+        for n in names:
+            assert logging.getLogger(n).getEffectiveLevel() >= logging.WARNING, n
+    finally:
+        for n, level in saved.items():
+            logging.getLogger(n).setLevel(level)
+
+
+async def test_main_fails_at_startup_without_api_key(  # type: ignore[no-untyped-def]
+    test_settings: Settings, tmp_path, monkeypatch
+) -> None:
+    async def fake_run_forever(sessionmaker, ctx, handlers, stop) -> None:  # type: ignore[no-untyped-def]
+        raise AssertionError("must not start")
+
+    monkeypatch.setattr(worker_module, "run_forever", fake_run_forever)
+    test_settings.upload_dir = tmp_path / "up"
+    test_settings.llm_enabled = True
+    test_settings.anthropic_api_key = None
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY is not set"):
+        await worker_module._main(test_settings)
+
+
+async def test_llm_job_helpers(sm, ctx) -> None:  # type: ignore[no-untyped-def]
+    from feynman_api.jobs.handlers._llm import (
+        as_job_error,
+        keep_lease,
+        require_llm,
+        sum_usage,
+        usage_dict,
+    )
+    from feynman_api.jobs.queue import claim
+    from feynman_api.jobs.registry import MSG_LLM_DISABLED
+    from feynman_api.llm import (
+        FakeLLMProvider,
+        LLMOutputValidationError,
+        LLMRateLimitError,
+        LLMRefusalError,
+        LLMUnavailableError,
+        Usage,
+    )
+
+    assert MSG_LLM_DISABLED == "AI features are turned off on this server."
+    with pytest.raises(PermanentJobError) as exc_info:
+        require_llm(ctx)
+    assert exc_info.value.user_message == MSG_LLM_DISABLED
+    fake = FakeLLMProvider()
+    ctx.llm = fake
+    assert require_llm(ctx) is fake
+
+    rl = LLMRateLimitError(retry_after=3)
+    un = LLMUnavailableError("down")
+    assert as_job_error(rl, "Perm.") is rl
+    assert as_job_error(un, "Perm.") is un
+    for exc in (LLMRefusalError("no"), LLMOutputValidationError("bad")):
+        mapped = as_job_error(exc, "Perm.")
+        assert isinstance(mapped, PermanentJobError)
+        assert mapped.user_message == "Perm."
+
+    u = Usage(model_id="m", input_tokens=10, output_tokens=5, cached_input_tokens=2)
+    d = usage_dict(u)
+    assert d == {"model_id": "m", "input_tokens": 10, "output_tokens": 5, "cached_input_tokens": 2}
+    assert sum_usage([d, d]) == {"input_tokens": 20, "output_tokens": 10, "cached_input_tokens": 4}
+    assert sum_usage([]) == {"input_tokens": 0, "output_tokens": 0, "cached_input_tokens": 0}
+
+    jid = await _job(sm)
+    async with sm() as s:
+        job = await claim(s, timedelta(seconds=10))
+        await s.commit()
+    assert job is not None
+    async with sm() as s:
+        await keep_lease(s, job, ctx)  # renews with llm_job_lease_seconds
+        now = (await s.execute(text("SELECT now()"))).scalar_one()
+        row = (await s.execute(select(Job).where(Job.id == jid))).scalar_one()
+        assert row.locked_until - now > timedelta(seconds=ctx.settings.llm_job_lease_seconds - 10)
+    async with sm() as s:
+        await s.execute(update(Job).where(Job.id == jid).values(attempts=Job.attempts + 1))
+        await s.commit()
+    async with sm() as s:
+        with pytest.raises(LeaseLost):
+            await keep_lease(s, job, ctx)
 
 
 def _typecheck(h: JobHandler) -> None:  # protocol conformance

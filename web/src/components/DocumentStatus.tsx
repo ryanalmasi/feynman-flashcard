@@ -3,13 +3,15 @@ import { api } from "@/api/client";
 import type { components } from "@/api/schema.gen";
 
 type DocumentSummary = components["schemas"]["DocumentSummary"];
+export type DocumentStatusValue = DocumentSummary["status"];
 
 export const POLL_MS = 2000;
 export const POLL_LIMIT_MS = 600_000;
 
 const FAILED_FALLBACK =
   "Something went wrong while processing this PDF. Try uploading it again.";
-const TIMEOUT_COPY = "This is taking longer than expected. Check back later.";
+export const TIMEOUT_COPY =
+  "This is taking longer than expected. Check back later.";
 
 function documentStatusText(doc: DocumentSummary, timedOut: boolean): string {
   if (doc.status === "ready") {
@@ -22,12 +24,22 @@ function documentStatusText(doc: DocumentSummary, timedOut: boolean): string {
 
 export default function DocumentStatus({
   document,
+  onStatusChange,
 }: {
   document: DocumentSummary;
+  /** Called whenever the polled status changes (not on mount). */
+  onStatusChange?: (status: DocumentStatusValue) => void;
 }) {
   const [doc, setDoc] = useState(document);
   const [timedOut, setTimedOut] = useState(false);
   const inFlight = useRef(false);
+  const reported = useRef(document.status);
+
+  useEffect(() => {
+    if (doc.status === reported.current) return;
+    reported.current = doc.status;
+    onStatusChange?.(doc.status);
+  }, [doc.status, onStatusChange]);
 
   const id = document.id;
   const polling = doc.status === "processing" && !timedOut;

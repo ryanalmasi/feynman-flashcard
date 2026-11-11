@@ -17,6 +17,12 @@ const BADGE: Record<"processing" | "ready" | "failed", string> = {
   failed: "Failed",
 };
 
+const MAP_HINT: Record<"processing" | "ready" | "failed", string> = {
+  processing: "Map: building",
+  ready: "Map: ready",
+  failed: "Map: failed",
+};
+
 export default function SetsPage() {
   const navigate = useNavigate();
   const [sets, setSets] = useState<StudySet[] | null>(null);
@@ -99,6 +105,11 @@ export default function SetsPage() {
                     >
                       {BADGE[s.document.status]}
                     </Badge>
+                  )}
+                  {s.knowledge_map && (
+                    <span className="text-xs">
+                      {MAP_HINT[s.knowledge_map.status]}
+                    </span>
                   )}
                 </CardContent>
               </Card>

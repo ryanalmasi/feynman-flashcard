@@ -13,6 +13,10 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 logger = logging.getLogger(__name__)
 
 NOT_FOUND_MESSAGE = "Not found."
+MAP_PROCESSING = "The Knowledge Map is still being built."
+MAP_NOT_READY = "The Knowledge Map isn't ready."
+CARDS_PROCESSING = "Flashcards are already being generated."
+MAP_FULL = "This Knowledge Map has the maximum number of concepts."
 _CODES = {404: "not_found", 405: "method_not_allowed"}
 
 
@@ -77,6 +81,11 @@ def registration_not_allowed() -> AppError:
 
 def email_taken() -> AppError:
     return AppError(409, "email_taken", "An account with this email already exists.")
+
+
+def conflict(message: str) -> AppError:
+    """409 for a resource state that refuses the request; message is one of the constants above."""
+    return AppError(409, "conflict", message)
 
 
 def password_breached() -> AppError:

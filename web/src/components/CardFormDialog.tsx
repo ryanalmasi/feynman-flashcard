@@ -11,7 +11,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-export type CardValues = { front: string; back: string };
+export type CardValues = {
+  kind: "qa" | "cloze";
+  front: string;
+  back: string;
+};
 
 type Props = {
   open: boolean;
@@ -29,6 +33,7 @@ function CardForm({
   onSubmit,
   onDone,
 }: Omit<Props, "open" | "onOpenChange" | "heading"> & { onDone: () => void }) {
+  const [kind, setKind] = useState<CardValues["kind"]>(initial?.kind ?? "qa");
   const [front, setFront] = useState(initial?.front ?? "");
   const [back, setBack] = useState(initial?.back ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -36,14 +41,14 @@ function CardForm({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!front.trim() || !back.trim()) {
+    if (kind === "qa" && (!front.trim() || !back.trim())) {
       setError("Front and back are both required.");
       return;
     }
     setError(null);
     setBusy(true);
     try {
-      const msg = await onSubmit({ front, back });
+      const msg = await onSubmit({ kind, front, back });
       if (msg) setError(msg);
       else onDone();
     } finally {
@@ -53,6 +58,24 @@ function CardForm({
 
   return (
     <form onSubmit={submit} className="grid gap-4">
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant={kind === "qa" ? "default" : "outline"}
+          aria-pressed={kind === "qa"}
+          onClick={() => setKind("qa")}
+        >
+          Q/A
+        </Button>
+        <Button
+          type="button"
+          variant={kind === "cloze" ? "default" : "outline"}
+          aria-pressed={kind === "cloze"}
+          onClick={() => setKind("cloze")}
+        >
+          Cloze
+        </Button>
+      </div>
       <div className="grid gap-2">
         <Label htmlFor="card-front">Front</Label>
         <Textarea
@@ -61,9 +84,17 @@ function CardForm({
           value={front}
           onChange={(e) => setFront(e.target.value)}
         />
+        {kind === "cloze" && (
+          <p className="text-sm text-muted-foreground">
+            Wrap the hidden part in double braces, e.g. The capital of France is
+            {" {{Paris}}."}
+          </p>
+        )}
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="card-back">Back</Label>
+        <Label htmlFor="card-back">
+          {kind === "cloze" ? "Note (optional)" : "Back"}
+        </Label>
         <Textarea
           id="card-back"
           maxLength={2000}
