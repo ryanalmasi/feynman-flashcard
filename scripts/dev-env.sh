@@ -35,12 +35,20 @@ if [[ ! -f "$API" ]]; then
       echo 'CORS_ORIGINS=["http://localhost:5173"]'
       echo "LOG_LEVEL=INFO"
       echo "SESSION_COOKIE_SECURE=false"
+      echo "LLM_ENABLED=false"
+      echo "ANTHROPIC_API_KEY="
     } > "$API"
   )
   echo "created api/.env"
-elif ! grep -qE '^SESSION_COOKIE_SECURE=' "$API"; then
-  printf 'SESSION_COOKIE_SECURE=false\n' >> "$API"
-  echo "added SESSION_COOKIE_SECURE=false to api/.env"
+else
+  if ! grep -qE '^SESSION_COOKIE_SECURE=' "$API"; then
+    printf 'SESSION_COOKIE_SECURE=false\n' >> "$API"
+    echo "added SESSION_COOKIE_SECURE=false to api/.env"
+  fi
+  if ! grep -qE '^LLM_ENABLED=' "$API"; then
+    printf 'LLM_ENABLED=false\nANTHROPIC_API_KEY=\n' >> "$API"
+    echo "added LLM settings to api/.env"
+  fi
 fi
 
 if [[ ! -f "$WEB" ]]; then

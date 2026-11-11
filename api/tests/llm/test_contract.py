@@ -26,6 +26,7 @@ from feynman_api.llm import (
     StreamDone,
     TextDelta,
 )
+from llm.anthropic_mock import make_anthropic_provider
 
 ProviderFactory = Callable[..., LLMProvider]
 
@@ -48,7 +49,7 @@ def _fake_factory(
     return FakeLLMProvider(replies=replies, structured=structured, error=error)
 
 
-@pytest.fixture(params=[_fake_factory], ids=["fake"])
+@pytest.fixture(params=[_fake_factory, make_anthropic_provider], ids=["fake", "anthropic"])
 def provider_factory(request: pytest.FixtureRequest) -> ProviderFactory:
     factory: ProviderFactory = request.param
     return factory
