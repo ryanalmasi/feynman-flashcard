@@ -286,3 +286,26 @@ async def test_only_nul_and_whitespace_is_no_text(sm, ctx, file_store, monkeypat
     assert doc.status == "failed"
     assert doc.error_message == MSG_NO_TEXT
     assert (await _job(sm, jid)).attempts == 1
+
+
+async def test_broken_on_failed_still_fails_document(  # type: ignore[no-untyped-def]
+    sm, ctx, file_store, monkeypatch
+) -> None:
+    async def broken_on_failed(self, db, job, user_message) -> None:  # type: ignore[no-untyped-def]
+        raise RuntimeError("on_failed broke")
+
+    def boom(*args: object, **kwargs: object) -> list[str]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(ExtractPdfHandler, "on_failed", broken_on_failed)
+    monkeypatch.setattr("feynman_api.jobs.handlers.extract_pdf._extract_pages", boom)
+    did, jid, _ = await _setup(sm, file_store, "text.pdf")
+    for _ in range(3):
+        await _make_due(sm, jid)
+        assert await run_once(sm, ctx, HANDLERS) is True
+    doc = await _doc(sm, did)
+    assert doc.status == "failed"
+    assert doc.error_message == GENERIC_FAILURE
+    job = await _job(sm, jid)
+    assert job.status == "failed"
+    assert job.locked_until is None

@@ -1,9 +1,19 @@
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from feynman_api.auth.rate_limit import clear, email_key, hit, ip_key, peek, prune
+from feynman_api.auth.rate_limit import (
+    card_generation_key,
+    clear,
+    email_key,
+    hit,
+    ip_key,
+    map_build_key,
+    peek,
+    prune,
+)
 from feynman_api.config import Settings
 from feynman_api.models import RateLimitBucket
 
@@ -75,3 +85,17 @@ def test_email_key_hashes_email() -> None:
     assert email_key("A@x.com") == email_key("a@x.com")
     assert email_key("a@x.com").startswith("login:email:")
     assert ip_key("login:ip:", "1.2.3.4").startswith("login:ip:")
+
+
+async def test_hit_without_commit_rolls_back(db: AsyncSession) -> None:
+    r = await hit(db, "k", 3, W, T0, commit=False)
+    assert r.allowed
+    await db.rollback()
+    assert (await peek(db, "k", 1, W, T0)).allowed is True
+    assert (await db.execute(select(RateLimitBucket))).first() is None
+
+
+def test_llm_limit_keys() -> None:
+    uid = uuid.UUID("12345678-1234-5678-1234-567812345678")
+    assert map_build_key(uid) == "map_build:user:12345678-1234-5678-1234-567812345678"
+    assert card_generation_key(uid) == "card_generation:user:12345678-1234-5678-1234-567812345678"

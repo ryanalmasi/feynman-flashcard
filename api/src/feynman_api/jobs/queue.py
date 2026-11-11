@@ -58,6 +58,20 @@ async def _mark(db: AsyncSession, job: Job, **values: Any) -> bool:
     return result.rowcount == 1  # type: ignore[attr-defined,no-any-return]
 
 
+async def renew_lease(db: AsyncSession, job: Job, lease: timedelta) -> bool:
+    """Extend the lease if this worker still owns the job.
+
+    On True, commits the session (including any pending writes made before the call).
+    On False, rolls back, so a stale worker commits nothing. Never call it after the final
+    writes begin: its commit would commit them outside `mark_succeeded`.
+    """
+    if await _mark(db, job, locked_until=func.now() + lease):
+        await db.commit()
+        return True
+    await db.rollback()
+    return False
+
+
 async def mark_succeeded(db: AsyncSession, job: Job, result: dict[str, Any] | None) -> bool:
     return await _mark(db, job, status="succeeded", result=result, locked_until=None)
 

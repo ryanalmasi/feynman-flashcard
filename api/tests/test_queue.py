@@ -13,8 +13,16 @@ from sqlalchemy.ext.asyncio import (
 
 from feynman_api.config import Settings
 from feynman_api.db import create_sessionmaker
-from feynman_api.jobs.queue import claim, enqueue, mark_failed, mark_retry, mark_succeeded
+from feynman_api.jobs.queue import (
+    claim,
+    enqueue,
+    mark_failed,
+    mark_retry,
+    mark_succeeded,
+    renew_lease,
+)
 from feynman_api.models.job import Job
+from feynman_api.models.study_set import StudySet
 from feynman_api.models.user import User
 
 LEASE = timedelta(seconds=300)
@@ -192,3 +200,41 @@ async def test_mark_helpers_set_state_and_truncate_error(sessionmaker, user_id) 
         assert row.last_error is not None
         assert len(row.last_error) == 500
         assert row.locked_until is None
+
+
+async def test_renew_lease_extends_and_commits(sessionmaker, user_id) -> None:  # type: ignore[no-untyped-def]
+    [jid] = await _enqueue_committed(sessionmaker, user_id)
+    async with sessionmaker() as s:
+        job = await claim(s, timedelta(seconds=10))
+        await s.commit()
+        assert job is not None
+        assert await renew_lease(s, job, timedelta(seconds=600)) is True
+    # Visible from another session: renew_lease committed.
+    async with sessionmaker() as other:
+        row = (await other.execute(select(Job).where(Job.id == jid))).scalar_one()
+        assert row.locked_until is not None
+        delta = row.locked_until - await _db_now(other)
+        assert timedelta(seconds=590) < delta <= timedelta(seconds=600)
+        assert row.status == "running"
+        assert row.attempts == 1
+
+
+async def test_renew_lease_false_after_reclaim(sessionmaker, user_id) -> None:  # type: ignore[no-untyped-def]
+    [jid] = await _enqueue_committed(sessionmaker, user_id)
+    async with sessionmaker() as s:
+        job = await claim(s, LEASE)
+        await s.commit()
+        assert job is not None
+    async with sessionmaker() as other:  # another worker reclaims the job
+        await other.execute(update(Job).where(Job.id == jid).values(attempts=Job.attempts + 1))
+        await other.commit()
+        before = (await other.execute(select(Job.locked_until).where(Job.id == jid))).scalar_one()
+    async with sessionmaker() as s:
+        s.add(StudySet(user_id=user_id, title="pending"))
+        await s.flush()
+        assert await renew_lease(s, job, timedelta(seconds=600)) is False
+        await s.commit()  # nothing left to commit: renew_lease rolled back
+    async with sessionmaker() as s:
+        after = (await s.execute(select(Job.locked_until).where(Job.id == jid))).scalar_one()
+        assert after == before
+        assert (await s.execute(select(StudySet))).first() is None

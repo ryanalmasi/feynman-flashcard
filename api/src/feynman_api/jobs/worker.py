@@ -13,13 +13,20 @@ from feynman_api.jobs.queue import claim, mark_failed, mark_retry, mark_succeede
 from feynman_api.jobs.registry import (
     GENERIC_FAILURE,
     JobHandler,
+    LeaseLost,
     PermanentJobError,
     WorkerContext,
+    generic_failure_for,
 )
+from feynman_api.llm.factory import build_llm_provider
 from feynman_api.models.job import Job
 from feynman_api.storage import LocalFileStore
 
 logger = logging.getLogger(__name__)
+
+# The SDK logs full request options (prompts, so PDF text) at DEBUG; httpx2/httpcore2 log
+# request lines and response headers. Keep them at WARNING whatever LOG_LEVEL says.
+_QUIET_LOGGERS = ("anthropic", "httpx2", "httpcore2")
 
 
 async def _fail(
@@ -40,13 +47,34 @@ async def _fail(
                 await db.commit()
                 return
         except Exception as exc:
-            # Never loop forever on a broken on_failed: record the failure alone below.
+            # The session rolled back on exit. Never loop forever on a broken on_failed:
+            # try the handler's minimal fallback, then record the failure alone below.
             logger.error(
-                "job %s: on_failed raised %s; marking failed without it",
+                "job %s: on_failed raised %s; trying the failure fallback",
                 job.id,
                 type(exc).__name__,
                 exc_info=True,
             )
+            fallback = getattr(handler, "failure_fallback", None)
+            if fallback is not None:
+                try:
+                    async with sessionmaker() as db:
+                        if not await mark_failed(db, job, error):
+                            logger.warning(
+                                "job %s: lease lost before failure could be recorded", job.id
+                            )
+                            await db.rollback()
+                            return
+                        await fallback(db, job, user_message)
+                        await db.commit()
+                        return
+                except Exception as fallback_exc:
+                    logger.error(
+                        "job %s: failure_fallback raised %s; marking failed without it",
+                        job.id,
+                        type(fallback_exc).__name__,
+                        exc_info=True,
+                    )
     async with sessionmaker() as db:
         if await mark_failed(db, job, error):
             await db.commit()
@@ -77,7 +105,8 @@ async def run_once(
     if job.attempts > job.max_attempts:
         # A reclaimed job whose lease expired on its last try: do not run it again.
         logger.error("job %s: attempts exhausted after lease expiry", job.id)
-        await _fail(sessionmaker, job, GENERIC_FAILURE, handler, GENERIC_FAILURE)
+        message = generic_failure_for(handler)
+        await _fail(sessionmaker, job, message, handler, message)
         return True
 
     try:
@@ -88,6 +117,9 @@ async def run_once(
             else:
                 await db.rollback()
                 logger.warning("job %s: lease lost, discarding result", job.id)
+    except LeaseLost:
+        # Another worker owns the job now: the handler session rolled back; record nothing.
+        logger.warning("job %s: lease lost during run; discarding its work", job.id)
     except PermanentJobError as e:
         logger.warning("job %s: permanent failure", job.id)
         await _fail(sessionmaker, job, e.user_message, handler, e.user_message)
@@ -103,7 +135,7 @@ async def run_once(
                     await db.rollback()
                     logger.warning("job %s: lease lost before retry was recorded", job.id)
         else:
-            await _fail(sessionmaker, job, name, handler, GENERIC_FAILURE)
+            await _fail(sessionmaker, job, name, handler, generic_failure_for(handler))
     return True
 
 
@@ -130,10 +162,15 @@ async def _main(settings: Settings) -> None:
     from feynman_api.jobs import handlers as _handlers  # noqa: F401  (registers handlers)
     from feynman_api.jobs.registry import HANDLERS
 
+    for name in _QUIET_LOGGERS:
+        quiet = logging.getLogger(name)
+        quiet.setLevel(max(quiet.getEffectiveLevel(), logging.WARNING))
+    # Fails here, at startup, when LLM_ENABLED is true but no key is set.
+    llm = build_llm_provider(settings)
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     engine = create_engine(settings)
     sessionmaker = create_sessionmaker(engine)
-    ctx = WorkerContext(settings=settings, file_store=LocalFileStore(settings.upload_dir))
+    ctx = WorkerContext(settings=settings, file_store=LocalFileStore(settings.upload_dir), llm=llm)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -142,6 +179,8 @@ async def _main(settings: Settings) -> None:
     try:
         await run_forever(sessionmaker, ctx, HANDLERS, stop)
     finally:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.remove_signal_handler(sig)
         await engine.dispose()
         logger.info("worker stopped")
 

@@ -4,7 +4,7 @@ from typing import Any
 
 import pypdfium2 as pdfium
 from pypdfium2 import PdfiumError
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from feynman_api.jobs.registry import PermanentJobError, WorkerContext
@@ -88,3 +88,13 @@ class ExtractPdfHandler:
         if doc is not None:
             doc.status = "failed"
             doc.error_message = user_message
+
+    async def failure_fallback(self, db: AsyncSession, job: Job, user_message: str) -> None:
+        """Minimal fallback when on_failed raised: one guarded UPDATE, nothing else."""
+        document_id = uuid.UUID(job.payload["document_id"])
+        await db.execute(
+            update(Document)
+            .where(Document.id == document_id, Document.status == "processing")
+            .values(status="failed", error_message=user_message)
+            .execution_options(synchronize_session=False)
+        )

@@ -12,6 +12,7 @@ from feynman_api.models import RateLimitBucket
 
 # Transactions: hit, clear and prune COMMIT the caller's session (so counts survive a failing
 # request), which also commits any pending work in it. Call them before making pending writes.
+# hit(commit=False) only flushes, so the count commits (or rolls back) with the caller's work.
 # peek only reads.
 _RETENTION = timedelta(days=1)
 
@@ -32,9 +33,19 @@ def _window(now: datetime, window: timedelta) -> tuple[datetime, int]:
 
 
 async def hit(
-    db: AsyncSession, key: str, limit: int, window: timedelta, now: datetime
+    db: AsyncSession,
+    key: str,
+    limit: int,
+    window: timedelta,
+    now: datetime,
+    *,
+    commit: bool = True,
 ) -> RateLimitResult:
-    """Count one attempt and commit, so the count survives a following 401/403/429."""
+    """Count one attempt.
+
+    By default commits, so the count survives a following 401/403/429. With commit=False it
+    only flushes: the count is part of the caller's transaction.
+    """
     start, retry_after = _window(now, window)
     stmt = (
         insert(RateLimitBucket)
@@ -46,7 +57,10 @@ async def hit(
         .returning(RateLimitBucket.count)
     )
     count = (await db.execute(stmt)).scalar_one()
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     return RateLimitResult(allowed=count <= limit, retry_after=retry_after)
 
 
@@ -84,3 +98,11 @@ def ip_key(prefix: str, ip: str) -> str:
 
 def account_delete_key(user_id: uuid.UUID) -> str:
     return "account_delete:user:" + str(user_id)
+
+
+def map_build_key(user_id: uuid.UUID) -> str:
+    return "map_build:user:" + str(user_id)
+
+
+def card_generation_key(user_id: uuid.UUID) -> str:
+    return "card_generation:user:" + str(user_id)
