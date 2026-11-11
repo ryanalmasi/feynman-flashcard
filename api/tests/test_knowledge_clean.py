@@ -44,21 +44,42 @@ def test_clean_dedupes_key_terms_case_insensitively() -> None:
         ExtractedKeyTerm(term="ATP", synonyms=["energy"]),
         ExtractedKeyTerm(term="atp", synonyms=["Energy", "adenosine"]),
         ExtractedKeyTerm(term="  ", synonyms=[]),
-    ] + [ExtractedKeyTerm(term=f"t{i}", synonyms=[]) for i in range(11)]
+        ExtractedKeyTerm(term="NADH", synonyms=[]),
+    ]
     (d,) = _clean(_c(key_terms=kts))
-    assert len(d.key_terms) == 10
-    assert d.key_terms[0] == {"term": "ATP", "synonyms": ["energy", "adenosine"]}
+    assert d.key_terms == [
+        {"term": "ATP", "synonyms": ["energy", "adenosine"]},
+        {"term": "NADH", "synonyms": []},
+    ]
+
+
+def test_clean_caps_key_terms_at_ten() -> None:
+    kts = [ExtractedKeyTerm(term=f"t{i}", synonyms=[]) for i in range(12)]
+    (d,) = _clean(_c(key_terms=kts))
+    assert [k["term"] for k in d.key_terms] == [f"t{i}" for i in range(10)]
+
+
+def test_clean_dedupes_misconceptions_and_drops_empty() -> None:
+    (d,) = _clean(_c(misconceptions=["m  1", "m 1", " ", "m2"]))
+    assert d.misconceptions == ["m 1", "m2"]
 
 
 def test_clean_caps_misconceptions_and_strips_nul() -> None:
     (d,) = _clean(
         _c(
             title="a\x00b",
-            misconceptions=["m  1", "m 1", " ", *[f"m{i}" for i in range(2, 9)]],
+            misconceptions=[f"m{i}" for i in range(8)],
             key_terms=[ExtractedKeyTerm(term="t\x00", synonyms=["s\x00", "", "S", *"abcdefg"])],
         )
     )
     assert d.title == "ab"
-    assert len(d.misconceptions) == 5 and d.misconceptions[0] == "m 1"
+    assert d.misconceptions == [f"m{i}" for i in range(5)]
     assert d.key_terms[0]["term"] == "t"
-    assert d.key_terms[0]["synonyms"][0] == "s" and len(d.key_terms[0]["synonyms"]) == 5
+    assert d.key_terms[0]["synonyms"] == ["s", "a", "b", "c", "d"]
+
+
+def test_clean_sorts_and_caps_source_pages() -> None:
+    (d,) = _clean(_c(source_pages=[5, 3]))
+    assert d.source_pages == [3, 5]
+    (d,) = _clean(_c(source_pages=list(range(200, 0, -1))), start=1, end=200)
+    assert d.source_pages == list(range(1, 51))

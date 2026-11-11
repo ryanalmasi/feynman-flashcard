@@ -50,7 +50,10 @@ def test_merge_groups_union_fields() -> None:
 
 
 def test_merge_unknown_ids_ignored_and_first_group_wins() -> None:
-    chunks = [[_d("A"), _d("B"), _d("C")], [_d("D"), _d("E")]]
+    chunks = [
+        [_d("A"), _d("B", pages=[7], terms=[("bterm", [])]), _d("C")],
+        [_d("D"), _d("E")],
+    ]
     groups = _g(
         ("c0-0", ["c0-0", "zzz", "c0-1"]),  # self-ref and unknown ignored
         ("c0-2", ["c0-1", "c1-0"]),  # c0-1 already used: ignored; c1-0 merges
@@ -58,6 +61,9 @@ def test_merge_unknown_ids_ignored_and_first_group_wins() -> None:
     )
     out = merge_concepts(chunks, groups)
     assert [c.title for c in out] == ["A", "C", "E"]
+    a, c, _e = out
+    assert a.source_pages == [7] and a.key_terms[0]["term"] == "bterm"
+    assert c.source_pages == [] and c.key_terms == []
 
 
 def test_merged_concept_sits_at_keep_position() -> None:
@@ -107,3 +113,10 @@ def test_merge_listing_format_and_cap() -> None:
     assert lines[0] == "c0-0 | A | First one."
     assert len(lines[1]) == MERGE_SUMMARY_MAX
     assert [i for i, _ in local_ids(chunks)] == ["c0-0", "c0-1"]
+
+
+def test_merge_system_prompt_guards_concepts_tag() -> None:
+    from feynman_api.knowledge.prompts import MERGE_SYSTEM_PROMPT
+
+    assert "<document>" in MERGE_SYSTEM_PROMPT and "<concepts>" in MERGE_SYSTEM_PROMPT
+    assert "c0-0 |" not in MERGE_SYSTEM_PROMPT
