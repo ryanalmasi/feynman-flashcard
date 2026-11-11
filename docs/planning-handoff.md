@@ -77,14 +77,15 @@ Full scoring robustness (§2.6–2.9), calibration and bake-off (§2.9, §3.1), 
 | Database | **Decided:** Postgres 18, SQLAlchemy 2 async + Alembic, migrator/app least-privilege roles ([0004](adr/0004-database-migrations-roles.md)). Host decided at deployment (Phase 3). |
 | Auth | **Decided and built in 2a:** own Postgres sessions; email+password in MVP, Google sign-in next ([0005](adr/0005-auth.md)). |
 | Config / secrets | **Decided** ([0006](adr/0006-config-secrets.md)). |
-| LLM abstraction | **Decided:** own thin interface ([0007](adr/0007-llm-provider-abstraction.md)). **Provider choice still open (P2).** |
+| LLM abstraction | **Decided:** own thin interface ([0007](adr/0007-llm-provider-abstraction.md)); `temperature` removed by [0019](adr/0019-llm-provider-anthropic.md). |
 | Background jobs | **Decided; built in 2a** as an own `jobs` table + worker ([0008](adr/0008-background-jobs.md), [0015](adr/0015-job-queue-own-table.md)). |
 | Tooling / CI | **Decided** ([0009](adr/0009-testing-lint-ci.md)). |
 | Old code | **Decided and done:** clean restart, kept the 7 images; the prototype is in git history at `5aba556` ([0010](adr/0010-old-prototype-code.md)). |
 | Git workflow | **Decided:** pushed phase branches, draft PR, owner merges ([0011](adr/0011-git-workflow.md)). |
 | Scoring | **Multi-stage:** an objective baseline plus AI-graded rubric scores, reconciled into a final score. Full design in §2; the MVP subset is in §0. Parameters open (P2). |
 | Embeddings | **Local model** (follows from 0001); exact model open (P2). |
-| LLM provider / voice | **Research done (§3). Owner decision pending** (provider P2, voice P3). |
+| LLM provider | **Decided (2026-11-10):** Anthropic; Sonnet 5.5 for the Knowledge Map, Haiku 5.5 for cards; prices re-verified 2026-11-10 ([0019](adr/0019-llm-provider-anthropic.md)). 2c tutor/judge models are decided in 2c. |
+| Voice | Research done (§3); P3. |
 | Pricing | **Draft only (§4b).** Not part of the MVP, but usage logging is. |
 | MVP scope / Phase 2 split | **Decided (2026-11-09):** §0 scope as written; split into 2a/2b/2c branches ([0012](adr/0012-mvp-scope-and-phase-2-split.md)). |
 | Age policy | **Decided:** 13+ neutral age screen, no birth date stored ([0013](adr/0013-age-policy.md)). EU 13–15 and policy wording are launch-time questions. |
@@ -93,7 +94,10 @@ Full scoring robustness (§2.6–2.9), calibration and bake-off (§2.9, §3.1), 
 | File storage | **Decided:** local disk behind `FileStore`; 20 MB / 200 pages / text PDFs only ([0016](adr/0016-file-storage.md)). |
 | Auth details | **Decided:** 12-char min, HIBP, Postgres rate limits, CSRF token, hashed sessions ([0017](adr/0017-auth-security-details.md)). |
 | Content model / PDF library | **Decided:** one PDF per set; pypdfium2 in the worker ([0018](adr/0018-study-content-model-and-pdf-library.md)). |
-| Phase 2a status | **Built on branch `phase-2a-foundations`, on a draft PR pending owner merge (2026-11-09):** accounts, study sets/cards, review, PDF upload and extraction. Deferred review items are listed in `memory.md`. 2b (LLM provider, Knowledge Map, generated cards) is next and starts with a decision round. |
+| Phase 2a status | **Merged (PR #2, 2026-11-09):** accounts, study sets/cards, review, PDF upload and extraction. Deferred review items are listed in `memory.md`. |
+| Knowledge Map | **Decided (2026-11-10):** automatic after extraction; edit/add/delete/reorder; chunk + merge with resume; 2M-char cap; per-user limits ([0020](adr/0020-knowledge-map.md)). |
+| Generated flashcards | **Decided (2026-11-10):** on request; 3/2/1 by importance; Q/A + cloze; draft tray; warned regeneration ([0021](adr/0021-generated-flashcards.md)). |
+| Phase 2b status | **Design approved (2026-11-10):** `docs/superpowers/specs/2026-11-10-phase-2b-ai-content-design.md`. Plan (`docs/implementation-plan-phase-2b.md`, Tasks 0-16) and kickoff (`handoff-prompts/implementer/phase-plan/implementer-phase-2b.md`) written and builder-checked (2026-11-10), **approved by the owner 2026-11-11**. Owner answer: Rebuild creates the map for a set with a ready PDF and no map (2a sets); no backfill. |
 | Old "Illumina" DB name | Irrelevant; drop it. |
 
 ---
@@ -448,7 +452,7 @@ Present each with options, trade-offs and a recommendation before implementation
 **Phase tags:** P1 = must be decided in Phase 1 (architecture). P2 = needed for the MVP. P3 = can wait.
 
 - **P1: all decided 2026-11-08/09**, see ADRs 0001–0011 and §1. (#4: local embeddings, model TBD in P2. #5: auth decided; Postgres host deferred to deployment.)
-- **P2 (2a built, reviewed and CI green on PR #2, awaiting the owner's merge):** #8 MVP scope **decided** (ADR 0012); #7 age policy **decided** (ADR 0013), provider data retention still open (with #2). **Still open:** #2 LLM provider (one for the MVP; needed for Phase 2b), #6 scoring parameters (MVP subset; needed for 2c), embedding model (2c)
+- **P2:** #8 MVP scope **decided** (ADR 0012); #7 age policy **decided** (ADR 0013), provider data retention **decided** (ADR 0019: default no retention, no training); #2 LLM provider **decided** for the MVP (ADR 0019). **Still open (needed for 2c):** #6 scoring parameters (MVP subset), the embedding model, the 2c tutor/judge models.
 - **P3:** #3 voice, #10 pricing and billing
 
 1. **Stack:** FastAPI + Vite/React (TS) vs. full-stack TypeScript.

@@ -1,6 +1,6 @@
 # 0007. LLM provider abstraction: own thin interface
 
-- **Status:** Accepted (owner, 2026-11-08)
+- **Status:** Accepted (owner, 2026-11-08). Amended by [0019](0019-llm-provider-anthropic.md) (2026-11-10): `temperature` is removed from both Protocol methods.
 
 ## Context
 The provider is not chosen yet (P2, and later a bake-off, planning doc §3.1/§2.9). Switching must stay cheap. Prompt caching is what keeps session costs low (§4), so provider-specific features must stay reachable. MVP usage logging needs token counts from every call.

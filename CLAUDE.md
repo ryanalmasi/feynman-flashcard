@@ -2,7 +2,7 @@
 
 Guidance for Claude Code sessions in this repository. It describes what the repo **currently is**, not what it is meant to become. The product vision is covered separately below so the two don't get mixed up.
 
-> **Status (2026-11-09):** **Phase 1 (architecture foundation) is merged to `main` (PR #1, CI green). Phase 2a is built on branch `phase-2a-foundations` and is on draft PR #2: reviewed by the orchestrator (no blocking findings), fixed up, CI green; awaiting the owner's merge.** 2a has accounts (register with a 13+ age screen, login/logout, account deletion), study sets and flashcards, a review screen, PDF upload, a Postgres job queue with a worker, and PDF text extraction, with a Tailwind + shadcn web UI. There is **no LLM use yet**: no Knowledge Map, generated cards, tutor, scoring or feedback (2b/2c). Phase 2 is split into 2a/2b/2c (ADR 0012); 2a's decisions are ADRs 0012-0018 and its design is `docs/superpowers/specs/2026-11-09-phase-2a-foundations-design.md`. After the merge, the next step is the 2b decision round. Read `memory.md` next.
+> **Status (2026-11-10):** **Phase 1 and Phase 2a are merged to `main` (PRs #1 and #2, CI green).** 2a has accounts (register with a 13+ age screen, login/logout, account deletion), study sets and flashcards, a review screen, PDF upload, a Postgres job queue with a worker, and PDF text extraction, with a Tailwind + shadcn web UI. There is **no LLM use in code yet**. **Phase 2b (Knowledge Map + generated flashcards) is decided and designed:** ADRs 0019-0021 and `docs/superpowers/specs/2026-11-10-phase-2b-ai-content-design.md` (approved, not yet committed); its plan (`docs/implementation-plan-phase-2b.md`) and implementer prompt are **approved by the owner (2026-11-11)**; the implementer run is next. Phase 2 is split into 2a/2b/2c (ADR 0012). Read `memory.md` next.
 >
 > The Jan-2025 prototype is in git history at `5aba556`.
 
@@ -30,7 +30,7 @@ A study tool built around the **Feynman technique**: after studying, the student
 | Database | PostgreSQL 18 (Docker Compose), SQLAlchemy 2 async (asyncpg), Alembic; roles `feynman_migrator` (DDL) and `feynman_app` (DML only) | 0004 |
 | Frontend | Vite, React 19, TypeScript (~5.9), React Router 8, openapi-fetch with generated types | 0002, 0009 |
 | Styling | Tailwind CSS 4 + shadcn/ui (radix-ui, sonner, tw-animate-css); tokens only in `web/src/index.css` | 0014 |
-| LLM layer | Own Protocols (`stream_chat`, `generate_structured`, `Embedder`) with `Usage` on every call; fakes only, no real provider yet (still true after 2a) | 0007 |
+| LLM layer | Own Protocols (`stream_chat`, `generate_structured`, `Embedder`) with `Usage` on every call; fakes only in code so far. **Decided for 2b, not built yet:** Anthropic adapter, Sonnet 5.5 for the map, Haiku 5.5 for cards, `temperature` removed from the Protocol | 0007, 0019 |
 | Tooling | ruff, mypy strict, pytest (real Postgres), ESLint (flat config) + Prettier, Vitest, pre-commit, gitleaks, GitHub Actions | 0006, 0009 |
 | Auth | **Built (2a):** own Postgres sessions (SHA-256-hashed tokens, HttpOnly cookie, per-session CSRF token + Origin check), argon2id, HIBP range check (fail-open), Postgres rate limits | 0005, 0013, 0017 |
 | Jobs / files / PDF | **Built (2a):** own `jobs` table + worker (`FOR UPDATE SKIP LOCKED`, leases, backoff); local-disk `FileStore`; pypdfium2 (worker only) | 0015, 0016, 0018 |
@@ -46,14 +46,15 @@ feynman-flashcard/
 ├── CLAUDE.md / memory.md / README.md / LICENSE
 ├── Makefile                      Developer entry points (see Commands)
 ├── docs/
-│   ├── adr/                      ADRs 0001-0018 + README index
-│   ├── superpowers/specs/        Phase 1 and Phase 2a design specs
+│   ├── adr/                      ADRs 0001-0021 + README index
+│   ├── superpowers/specs/        Phase 1, 2a and 2b design specs
 │   ├── implementation-plan.md    Phase 1 plan (Tasks 0-9) + Phase 2 outline (NOT FOR EXECUTION)
 │   ├── implementation-plan-phase-2a.md   Phase 2a plan (Tasks 0-15)
+│   ├── implementation-plan-phase-2b.md   Phase 2b plan (Tasks 0-16; approved)
 │   ├── planning-handoff.md       Roadmap (§0), decisions (§1), scoring design (§2), research, costs, open decisions (§5)
 │   └── setup-prerequisites.md    Machine setup (WSL, Docker, uv, Node, gh, gitleaks)
 ├── handoff-prompts/
-│   ├── orchestrator/             Numbered orchestrator handoffs (latest: #4)
+│   ├── orchestrator/             Numbered orchestrator handoffs (latest: #6)
 │   └── implementer/
 │       ├── phase-plan/           Implementer kickoffs per phase (+ resume prompts for a phase run)
 │       └── fixup/                Implementer kickoffs for fix-up rounds after a PR review
@@ -192,7 +193,7 @@ Local results at the end of Phase 2a (after the fix-up, `5d0e027`): **238 pytest
 
 ## Notes for future sessions
 
-- Phase 1 is merged; Phase 2a is built and on a draft PR. Next: the orchestrator reviews the PR and the owner merges, then the 2b decision round (LLM provider, Knowledge Map, generated cards), then 2c (tutor, scoring, feedback, usage logging). Known deferred review items are listed in `memory.md`.
+- Phase 1 and 2a are merged; 2b is decided (ADRs 0019-0021: Anthropic, Knowledge Map, generated cards) and its design approved. Next: the 2b plan and implementer prompt, the implementer run, the PR review, then the 2c decision round (tutor, scoring, feedback, usage logging). Known deferred review items are listed in `memory.md`.
 - **Start with [`docs/planning-handoff.md`](docs/planning-handoff.md).** It holds the detailed multi-stage scoring design, the provider, voice, embedding, and Postgres research with pricing, per-session cost estimates, and the list of open decisions for the owner.
 
 ### Phase order (decided)
