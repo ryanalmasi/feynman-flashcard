@@ -15,6 +15,7 @@ from feynman_api.routes.auth import router as auth_router
 from feynman_api.routes.documents import router as documents_router
 from feynman_api.routes.flashcards import router as flashcards_router
 from feynman_api.routes.health import router as health_router
+from feynman_api.routes.knowledge_maps import router as knowledge_maps_router
 from feynman_api.routes.study_sets import router as study_sets_router
 from feynman_api.storage import FileStore, LocalFileStore
 from feynman_api.upload_limit import BodySizeLimitMiddleware
@@ -84,4 +85,5 @@ def create_app(
     app.include_router(study_sets_router)
     app.include_router(flashcards_router)
     app.include_router(documents_router)
+    app.include_router(knowledge_maps_router)
     return app

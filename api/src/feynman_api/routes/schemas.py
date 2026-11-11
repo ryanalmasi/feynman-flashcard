@@ -4,6 +4,17 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
+from feynman_api.knowledge.limits import (
+    CONCEPTS_MAX,
+    EXPLANATION_MAX,
+    KEY_TERMS_MAX,
+    MISCONCEPTION_MAX,
+    MISCONCEPTIONS_MAX,
+    SOURCE_PAGES_MAX,
+    SYNONYMS_MAX,
+    TERM_MAX,
+)
+
 
 def _no_nul(value: str) -> str:
     # Postgres text cannot hold NUL; reject it as a validation error instead of a 500.
@@ -110,3 +121,95 @@ class DocumentOut(BaseModel):
 class UploadOut(BaseModel):
     study_set: StudySetOut
     document: DocumentOut
+
+
+Importance = Literal["core", "supporting", "detail"]
+Term = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=TERM_MAX), NoNul
+]
+Explanation = Annotated[str, Field(min_length=1, max_length=EXPLANATION_MAX), NoNul]
+Misconception = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=MISCONCEPTION_MAX),
+    NoNul,
+]
+
+
+def _sorted_unique(pages: list[int]) -> list[int]:
+    return sorted(set(pages))
+
+
+SourcePages = Annotated[
+    list[Annotated[int, Field(ge=1)]],
+    Field(max_length=SOURCE_PAGES_MAX),
+    AfterValidator(_sorted_unique),
+]
+
+
+class KeyTerm(BaseModel):
+    term: Term
+    synonyms: Annotated[list[Term], Field(max_length=SYNONYMS_MAX)] = []
+
+
+KeyTerms = Annotated[list[KeyTerm], Field(max_length=KEY_TERMS_MAX)]
+Misconceptions = Annotated[list[Misconception], Field(max_length=MISCONCEPTIONS_MAX)]
+
+
+class ConceptOut(BaseModel):
+    id: uuid.UUID
+    position: int
+    title: str
+    explanation: str
+    importance: Importance
+    key_terms: list[KeyTerm]
+    misconceptions: list[str]
+    source_pages: list[int]
+
+
+class ConceptCreate(BaseModel):
+    title: Title
+    explanation: Explanation
+    importance: Importance
+    key_terms: KeyTerms = []
+    misconceptions: Misconceptions = []
+    source_pages: SourcePages = []
+
+    @model_validator(mode="after")
+    def _not_blank(self) -> Self:
+        _reject_blank(self.explanation)
+        return self
+
+
+class ConceptUpdate(BaseModel):
+    """An omitted field is unchanged; an explicit null is a 422."""
+
+    title: Title | None = None
+    explanation: Explanation | None = None
+    importance: Importance | None = None
+    key_terms: KeyTerms | None = None
+    misconceptions: Misconceptions | None = None
+    source_pages: SourcePages | None = None
+
+    @model_validator(mode="after")
+    def _valid(self) -> Self:
+        for name in self.model_fields_set:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name} must not be null")
+        _reject_blank(self.explanation)
+        return self
+
+
+class KnowledgeMapOut(BaseModel):
+    id: uuid.UUID
+    status: Literal["processing", "ready", "failed"]
+    error_message: str | None
+    model_id: str | None
+    revision: int
+    cards_status: Literal["idle", "processing", "failed"]
+    cards_error_message: str | None
+    source_filename: str
+    concepts: list[ConceptOut]
+
+
+class ConceptOrder(BaseModel):
+    concept_ids: Annotated[list[uuid.UUID], Field(max_length=CONCEPTS_MAX)]
