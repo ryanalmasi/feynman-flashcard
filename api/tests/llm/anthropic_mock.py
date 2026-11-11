@@ -48,10 +48,11 @@ def message_response(
     text: str | None,
     stop_reason: str,
     usage: dict[str, int] | None = None,
+    response_model: str | None = None,
 ) -> httpx2.Response:
     """A Messages API reply for `body`: JSON, or SSE when the request asked to stream."""
     usage = dict(DEFAULT_USAGE if usage is None else usage)
-    model = body["model"]
+    model = response_model or body["model"]
     if not body.get("stream"):
         return httpx2.Response(
             200,
@@ -152,10 +153,12 @@ def make_anthropic_provider(
     api_key: str = "test-key",
     effort: str = "medium",
     usage: dict[str, int] | None = None,
+    response_model: str | None = None,
 ) -> AnthropicProvider:
     """An AnthropicProvider whose HTTP traffic goes to a scenario-driven mock handler.
 
     A `str` entry in `structured` is sent verbatim as the reply text (e.g. invalid JSON).
+    `response_model` replaces the echoed request `model` in successful replies.
     """
     reply_list = tuple(replies) or ("Fake reply.",)
     structured_list = tuple(structured)
@@ -177,7 +180,9 @@ def make_anthropic_provider(
         else:
             text = reply_list[counters["reply"] % len(reply_list)]
             counters["reply"] += 1
-        return message_response(body, text=text, stop_reason="end_turn", usage=usage)
+        return message_response(
+            body, text=text, stop_reason="end_turn", usage=usage, response_model=response_model
+        )
 
     return AnthropicProvider(
         mock_client(handler, api_key=api_key), effort=effort, request_timeout=30.0

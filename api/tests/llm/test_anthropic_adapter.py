@@ -112,10 +112,10 @@ async def test_usage_mapping_includes_cache_tokens() -> None:
         "cache_read_input_tokens": 20,
         "output_tokens": 7,
     }
-    p = make_anthropic_provider(structured=[{"answer": "x"}], usage=usage)
-    expected = Usage(
-        model_id="claude-sonnet-5-5", input_tokens=35, cached_input_tokens=20, output_tokens=7
-    )
+    # The reply names a different model than the request: model_id must come from the reply.
+    served = "claude-sonnet-5-5-20261101"
+    p = make_anthropic_provider(structured=[{"answer": "x"}], usage=usage, response_model=served)
+    expected = Usage(model_id=served, input_tokens=35, cached_input_tokens=20, output_tokens=7)
     for max_tokens in (50, 32_000):
         r = await _structured(p, model="claude-sonnet-5-5", max_tokens=max_tokens)
         assert r.usage == expected
