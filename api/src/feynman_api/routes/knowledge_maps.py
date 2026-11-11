@@ -120,6 +120,14 @@ async def _commit(db: AsyncSession) -> None:
         raise conflict(MAP_PROCESSING) from None
 
 
+async def _flush(db: AsyncSession) -> None:
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise conflict(MAP_PROCESSING) from None
+
+
 def _settings(request: Request) -> Settings:
     settings: Settings = request.app.state.settings
     return settings
@@ -182,7 +190,7 @@ async def rebuild_knowledge_map(
             study_set_id=study_set.id, document_id=new_map_document, status="processing"
         )
         db.add(km)
-        await db.flush()
+        await _flush(db)  # the unique study_set_id is not deferrable: a racing create fails here
     else:
         km.status = "processing"
         km.error_message = None

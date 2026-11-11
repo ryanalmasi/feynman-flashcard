@@ -17,6 +17,7 @@ from feynman_api.models import (
     KnowledgeMap,
     KnowledgeMapChunk,
 )
+from feynman_api.routes import knowledge_maps
 
 pytestmark = pytest.mark.usefixtures("clean_db")
 
@@ -578,4 +579,25 @@ async def test_rebuild_missing_map_cross_user_404(
     r = await _rebuild(user_client, other_sid)
     assert r.status_code == 404 and r.json()["error"]["code"] == "not_found"
     assert await _count(db, KnowledgeMap) == 0
+    assert await _jobs(db) == []
+
+
+async def test_rebuild_concurrent_map_create_409(
+    user_client: httpx.AsyncClient, db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A competing request commits the set's map after this one found none (the unique
+    # study_set_id is not deferrable, so the violation surfaces at the INSERT's flush).
+    sid = await _set(user_client)
+    doc = await _doc(db, sid)
+    real_hit = hit
+
+    async def hit_then_race(*args: Any, **kwargs: Any) -> Any:
+        result = await real_hit(*args, **kwargs)
+        db.add(KnowledgeMap(study_set_id=sid, document_id=doc.id, status="processing"))
+        await db.commit()
+        return result
+
+    monkeypatch.setattr(knowledge_maps, "hit", hit_then_race)
+    _conflict(await _rebuild(user_client, sid), MAP_PROCESSING)
+    assert await _count(db, KnowledgeMap) == 1
     assert await _jobs(db) == []
