@@ -1,4 +1,22 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import type { Announcements, DragEndEvent } from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { api, errorMessage } from "@/api/client";
 import type { components } from "@/api/schema.gen";
@@ -106,89 +124,124 @@ function NoMap({
 
 function ConceptRow({
   concept,
+  index,
   disabled,
+  sortDisabled,
   onEdit,
   onDelete,
 }: {
   concept: Concept;
+  index: number;
+  /** Locks the row's controls, the drag handle included. */
   disabled: boolean;
+  /** Locks dragging only (also while a reorder is being saved). */
+  sortDisabled: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: concept.id, disabled: sortDisabled });
   const pages = formatPages(concept.source_pages);
   const hasDetails =
     concept.key_terms.length > 0 || concept.misconceptions.length > 0;
   return (
-    <Card>
-      <CardContent className="grid gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-semibold">{concept.title}</h3>
-          <Badge variant={IMPORTANCE_VARIANT[concept.importance]}>
-            {IMPORTANCE_LABELS[concept.importance]}
-          </Badge>
-          {pages && (
-            <span className="text-sm text-muted-foreground">{pages}</span>
+    <li
+      ref={setNodeRef}
+      data-index={index}
+      className={isDragging ? "relative z-10" : undefined}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      <Card>
+        <CardContent className="grid gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              ref={setActivatorNodeRef}
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="cursor-grab touch-none"
+              aria-label={`Reorder ${concept.title}`}
+              disabled={disabled}
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical aria-hidden="true" />
+            </Button>
+            <h3 className="font-semibold">{concept.title}</h3>
+            <Badge variant={IMPORTANCE_VARIANT[concept.importance]}>
+              {IMPORTANCE_LABELS[concept.importance]}
+            </Badge>
+            {pages && (
+              <span className="text-sm text-muted-foreground">{pages}</span>
+            )}
+          </div>
+          <p className="whitespace-pre-wrap">{concept.explanation}</p>
+          {hasDetails && (
+            <details className="grid gap-2 text-sm">
+              <summary className="cursor-pointer font-medium">
+                Key terms and misconceptions
+              </summary>
+              {concept.key_terms.length > 0 && (
+                <div className="mt-2 grid gap-1">
+                  <h4 className="font-medium">Key terms</h4>
+                  <ul className="list-disc pl-5">
+                    {concept.key_terms.map((kt) => (
+                      <li key={kt.term}>
+                        <span>{kt.term}</span>
+                        {kt.synonyms.length > 0 && (
+                          <span className="text-muted-foreground">
+                            {` (${kt.synonyms.join(", ")})`}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {concept.misconceptions.length > 0 && (
+                <div className="mt-2 grid gap-1">
+                  <h4 className="font-medium">Misconceptions</h4>
+                  <ul className="list-disc pl-5">
+                    {concept.misconceptions.map((m, i) => (
+                      <li key={i} className="whitespace-pre-wrap">
+                        {m}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </details>
           )}
-        </div>
-        <p className="whitespace-pre-wrap">{concept.explanation}</p>
-        {hasDetails && (
-          <details className="grid gap-2 text-sm">
-            <summary className="cursor-pointer font-medium">
-              Key terms and misconceptions
-            </summary>
-            {concept.key_terms.length > 0 && (
-              <div className="mt-2 grid gap-1">
-                <h4 className="font-medium">Key terms</h4>
-                <ul className="list-disc pl-5">
-                  {concept.key_terms.map((kt) => (
-                    <li key={kt.term}>
-                      <span>{kt.term}</span>
-                      {kt.synonyms.length > 0 && (
-                        <span className="text-muted-foreground">
-                          {` (${kt.synonyms.join(", ")})`}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {concept.misconceptions.length > 0 && (
-              <div className="mt-2 grid gap-1">
-                <h4 className="font-medium">Misconceptions</h4>
-                <ul className="list-disc pl-5">
-                  {concept.misconceptions.map((m, i) => (
-                    <li key={i} className="whitespace-pre-wrap">
-                      {m}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </details>
-        )}
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            aria-label={`Edit ${concept.title}`}
-            disabled={disabled}
-            onClick={onEdit}
-          >
-            Edit
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            aria-label={`Delete ${concept.title}`}
-            disabled={disabled}
-            onClick={onDelete}
-          >
-            Delete
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label={`Edit ${concept.title}`}
+              disabled={disabled}
+              onClick={onEdit}
+            >
+              Edit
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label={`Delete ${concept.title}`}
+              disabled={disabled}
+              onClick={onDelete}
+            >
+              Delete
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </li>
   );
 }
 
@@ -205,6 +258,22 @@ export default function KnowledgeMapTab({
   const [confirmRebuild, setConfirmRebuild] = useState(false);
   const [conceptDialog, setConceptDialog] = useState<ConceptDialog>(null);
   const [deleting, setDeleting] = useState<Concept | null>(null);
+  // An order shown before the server confirms it; it applies only to the
+  // map it was made from, so any new map from the server replaces it.
+  const [optimistic, setOptimistic] = useState<{
+    base: KnowledgeMapOut;
+    concepts: Concept[];
+  } | null>(null);
+  const [saving, setSaving] = useState(false);
+  // The last target announced: dnd-kit reports the picked-up row as "over"
+  // itself right away, which would replace "Picked up …" with a no-op move.
+  const announcedOver = useRef<unknown>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   async function rebuild() {
     setBuilding(true);
@@ -265,6 +334,27 @@ export default function KnowledgeMapTab({
     }
   }
 
+  async function saveOrder(base: KnowledgeMapOut, concepts: Concept[]) {
+    setOptimistic({ base, concepts });
+    setSaving(true);
+    try {
+      const { data, error } = await api.PUT(
+        "/study-sets/{set_id}/knowledge-map/order",
+        {
+          params: { path: { set_id: setId } },
+          body: { concept_ids: concepts.map((c) => c.id) },
+        },
+      );
+      if (data) onReplace(data);
+      else toast.error(errorMessage(error));
+    } catch {
+      toast.error(errorMessage(null));
+    } finally {
+      setOptimistic(null);
+      setSaving(false);
+    }
+  }
+
   if (state === "loading") {
     return <p className="text-muted-foreground">Loading…</p>;
   }
@@ -291,6 +381,34 @@ export default function KnowledgeMapTab({
   const locked = mapProcessing || cardsProcessing || building;
   const editable = map.status === "ready" && !locked;
   const n = map.concepts.length;
+  const concepts =
+    optimistic && optimistic.base === map ? optimistic.concepts : map.concepts;
+  const titleOf = (id: unknown) =>
+    concepts.find((c) => c.id === id)?.title ?? "";
+  const positionOf = (id: unknown) =>
+    concepts.findIndex((c) => c.id === id) + 1;
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => {
+      announcedOver.current = active.id;
+      return `Picked up ${titleOf(active.id)}.`;
+    },
+    onDragOver: ({ active, over }) => {
+      if (!over || over.id === announcedOver.current) return undefined;
+      announcedOver.current = over.id;
+      return `${titleOf(active.id)} moved to position ${positionOf(over.id)}.`;
+    },
+    onDragEnd: ({ active, over }) =>
+      `${titleOf(active.id)} dropped at position ${positionOf((over ?? active).id)}.`,
+    onDragCancel: () => "Reordering cancelled.",
+  };
+
+  function onDragEnd({ active, over }: DragEndEvent) {
+    if (!map || !over || active.id === over.id || !editable || saving) return;
+    const from = concepts.findIndex((c) => c.id === active.id);
+    const to = concepts.findIndex((c) => c.id === over.id);
+    if (from < 0 || to < 0) return;
+    void saveOrder(map, arrayMove(concepts, from, to));
+  }
 
   return (
     <section className="grid gap-4">
@@ -348,18 +466,31 @@ export default function KnowledgeMapTab({
       {n === 0 && map.status === "ready" && (
         <p className="text-muted-foreground">No concepts yet.</p>
       )}
-      <ul className="grid gap-3">
-        {map.concepts.map((c) => (
-          <li key={c.id}>
-            <ConceptRow
-              concept={c}
-              disabled={!editable}
-              onEdit={() => setConceptDialog({ mode: "edit", concept: c })}
-              onDelete={() => setDeleting(c)}
-            />
-          </li>
-        ))}
-      </ul>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        accessibility={{ announcements }}
+        onDragEnd={onDragEnd}
+      >
+        <SortableContext
+          items={concepts.map((c) => c.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <ul className="grid gap-3">
+            {concepts.map((c, i) => (
+              <ConceptRow
+                key={c.id}
+                concept={c}
+                index={i}
+                disabled={!editable}
+                sortDisabled={!editable || saving}
+                onEdit={() => setConceptDialog({ mode: "edit", concept: c })}
+                onDelete={() => setDeleting(c)}
+              />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
 
       <ConceptFormDialog
         open={conceptDialog !== null}

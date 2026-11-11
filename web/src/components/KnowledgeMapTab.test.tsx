@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import KnowledgeMapTab from "./KnowledgeMapTab";
 import { POLL_LIMIT_MS, POLL_MS, TIMEOUT_COPY } from "./DocumentStatus";
 import { useKnowledgeMap } from "@/hooks/useKnowledgeMap";
@@ -408,9 +408,15 @@ describe("KnowledgeMapTab", () => {
       "Delete Cell division",
       "Edit Respiration",
       "Delete Respiration",
+      "Reorder Cell division",
+      "Reorder Respiration",
     ]) {
       expect(screen.getByRole("button", { name })).toBeDisabled();
     }
+    // The sortables themselves are disabled too (dnd-kit's aria-disabled).
+    expect(
+      screen.getByRole("button", { name: "Reorder Respiration" }),
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("disables every mutating control while the map is processing", async () => {
@@ -427,6 +433,11 @@ describe("KnowledgeMapTab", () => {
     expect(
       screen.getByRole("button", { name: "Delete Cell division" }),
     ).toBeDisabled();
+    const handle = screen.getByRole("button", {
+      name: "Reorder Cell division",
+    });
+    expect(handle).toBeDisabled();
+    expect(handle).toHaveAttribute("aria-disabled", "true");
   });
 
   it("a failed map shows its message and a Rebuild button", async () => {
@@ -525,6 +536,131 @@ describe("KnowledgeMapTab", () => {
         expect(toast.error).toHaveBeenCalledWith("Too many requests."),
       );
       expect(build).toBeEnabled();
+    });
+  });
+
+  describe("reordering", () => {
+    const A = concept("ca", "Alpha");
+    const B = concept("cb", "Beta", { position: 1 });
+    const C = concept("cc", "Gamma", { position: 2 });
+    const ORDER = "PUT /study-sets/s1/knowledge-map/order";
+    const titles = () =>
+      screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    const realScrollIntoView = Element.prototype.scrollIntoView;
+    let rects: { mockRestore: () => void } | undefined;
+
+    beforeEach(() => {
+      // jsdom has no layout: a sortable row (and anything inside it) gets
+      // top = 50 * its data-index, height 40, inside the 768 px viewport.
+      rects = vi
+        .spyOn(Element.prototype, "getBoundingClientRect")
+        .mockImplementation(function (this: Element) {
+          const row = this.closest("[data-index]");
+          const top = row ? 50 * Number(row.getAttribute("data-index")) : 0;
+          const height = row ? 40 : 0;
+          return {
+            x: 0,
+            y: top,
+            top,
+            left: 0,
+            width: row ? 300 : 0,
+            height,
+            right: row ? 300 : 0,
+            bottom: top + height,
+            toJSON: () => ({}),
+          } as DOMRect;
+        });
+      Element.prototype.scrollIntoView = vi.fn();
+    });
+    afterEach(() => {
+      rects?.mockRestore();
+      Element.prototype.scrollIntoView = realScrollIntoView;
+    });
+
+    async function pickUpAlpha() {
+      const user = userEvent.setup();
+      const handle = await screen.findByRole("button", {
+        name: "Reorder Alpha",
+      });
+      act(() => handle.focus());
+      await user.keyboard("[Space]");
+      expect(await screen.findByText("Picked up Alpha.")).toBeInTheDocument();
+      return user;
+    }
+
+    it("keyboard reorder sends exactly one PUT with the new order", async () => {
+      const m = stubFetch({
+        [KM]: () => json(mapOut({ concepts: [A, B, C] }), 200),
+        [ORDER]: () => json(mapOut({ revision: 2, concepts: [B, A, C] }), 200),
+      });
+      render(<Harness documentStatus="ready" />);
+      const user = await pickUpAlpha();
+      await user.keyboard("[ArrowDown]");
+      expect(
+        await screen.findByText("Alpha moved to position 2."),
+      ).toBeInTheDocument();
+      await user.keyboard("[Space]");
+      expect(
+        await screen.findByText("Alpha dropped at position 2."),
+      ).toBeInTheDocument();
+
+      await waitFor(async () =>
+        expect(await requests(m, "PUT")).toHaveLength(1),
+      );
+      const [put] = await requests(m, "PUT");
+      expect(put.path).toBe("/study-sets/s1/knowledge-map/order");
+      expect(JSON.parse(put.body)).toEqual({ concept_ids: ["cb", "ca", "cc"] });
+      await waitFor(() => expect(titles()).toEqual(["Beta", "Alpha", "Gamma"]));
+      expect(await requests(m, "PUT")).toHaveLength(1);
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it("a failed PUT restores the previous order and shows a toast", async () => {
+      let release: (r: Response) => void = () => {};
+      const m = stubFetch({
+        [KM]: () => json(mapOut({ concepts: [A, B, C] }), 200),
+        [ORDER]: () => new Promise<Response>((r) => (release = r)),
+      });
+      render(<Harness documentStatus="ready" />);
+      const user = await pickUpAlpha();
+      await user.keyboard("[ArrowDown]");
+      await screen.findByText("Alpha moved to position 2.");
+      await user.keyboard("[Space]");
+      await waitFor(async () =>
+        expect(await requests(m, "PUT")).toHaveLength(1),
+      );
+      // Optimistic: the new order shows while the request is in flight.
+      expect(titles()).toEqual(["Beta", "Alpha", "Gamma"]);
+      await act(async () => {
+        release(
+          json(
+            apiError("conflict", "Flashcards are already being generated."),
+            409,
+          ),
+        );
+      });
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          "Flashcards are already being generated.",
+        ),
+      );
+      expect(titles()).toEqual(["Alpha", "Beta", "Gamma"]);
+    });
+
+    it("Escape cancels the drag without a request", async () => {
+      const m = stubFetch({
+        [KM]: () => json(mapOut({ concepts: [A, B, C] }), 200),
+      });
+      render(<Harness documentStatus="ready" />);
+      const user = await pickUpAlpha();
+      await user.keyboard("[ArrowDown]");
+      await screen.findByText("Alpha moved to position 2.");
+      await user.keyboard("[Escape]");
+      expect(
+        await screen.findByText("Reordering cancelled."),
+      ).toBeInTheDocument();
+      expect(await requests(m, "PUT")).toHaveLength(0);
+      expect(titles()).toEqual(["Alpha", "Beta", "Gamma"]);
     });
   });
 
