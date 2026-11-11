@@ -1,6 +1,10 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import DocumentStatus, { POLL_LIMIT_MS, POLL_MS } from "./DocumentStatus";
+import DocumentStatus, {
+  POLL_LIMIT_MS,
+  POLL_MS,
+  TIMEOUT_COPY,
+} from "./DocumentStatus";
 import { json, stubFetch } from "@/test/pageUtils";
 
 const base = {
@@ -22,6 +26,45 @@ describe("DocumentStatus", () => {
   it("exports the polling constants", () => {
     expect(POLL_MS).toBe(2000);
     expect(POLL_LIMIT_MS).toBe(600_000);
+    expect(TIMEOUT_COPY).toBe(
+      "This is taking longer than expected. Check back later.",
+    );
+  });
+
+  it("calls onStatusChange whenever the polled status changes", async () => {
+    const replies = [
+      out("processing"),
+      out("processing"),
+      out("ready", { page_count: 3 }),
+    ];
+    stubFetch({ "GET /documents/d1": () => replies.shift()! });
+    const onStatusChange = vi.fn();
+    render(
+      <DocumentStatus
+        document={{ ...base, status: "processing" }}
+        onStatusChange={onStatusChange}
+      />,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS * 2));
+    expect(onStatusChange).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
+    expect(onStatusChange).toHaveBeenCalledTimes(1);
+    expect(onStatusChange).toHaveBeenCalledWith("ready");
+  });
+
+  it("reports a failed status", async () => {
+    stubFetch({
+      "GET /documents/d1": () => out("failed", { error_message: "Bad." }),
+    });
+    const onStatusChange = vi.fn();
+    render(
+      <DocumentStatus
+        document={{ ...base, status: "processing" }}
+        onStatusChange={onStatusChange}
+      />,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
+    expect(onStatusChange).toHaveBeenCalledExactlyOnceWith("failed");
   });
 
   it("polls every 2 s and stops on ready", async () => {

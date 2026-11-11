@@ -1,19 +1,29 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { api, errorMessage } from "@/api/client";
 import type { components } from "@/api/schema.gen";
+import AiBadge from "@/components/AiBadge";
 import CardFormDialog from "@/components/CardFormDialog";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import DocumentStatus from "@/components/DocumentStatus";
+import type { DocumentStatusValue } from "@/components/DocumentStatus";
+import KnowledgeMapTab from "@/components/KnowledgeMapTab";
 import SetFormDialog from "@/components/SetFormDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useKnowledgeMap } from "@/hooks/useKnowledgeMap";
 
 type StudySet = components["schemas"]["StudySetOut"];
 type Flashcard = components["schemas"]["FlashcardOut"];
 
 type CardDialog = { mode: "add" } | { mode: "edit"; card: Flashcard } | null;
+
+const TABS = ["cards", "map", "suggested"] as const;
+type Tab = (typeof TABS)[number];
+const isTab = (v: string | null): v is Tab =>
+  (TABS as readonly (string | null)[]).includes(v);
 
 export default function SetDetailPage() {
   const { setId = "" } = useParams();
@@ -28,6 +38,12 @@ export default function SetDetailPage() {
   const [cardDialog, setCardDialog] = useState<CardDialog>(null);
   const [deletingCard, setDeletingCard] = useState<Flashcard | null>(null);
   const [deletingSet, setDeletingSet] = useState(false);
+  const [documentStatus, setDocumentStatus] =
+    useState<DocumentStatusValue | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get("tab");
+  const tab: Tab = isTab(rawTab) ? rawTab : "cards";
+  const knowledgeMap = useKnowledgeMap(setId, documentStatus === "processing");
 
   const [version, setVersion] = useState(0);
   const reload = () => setVersion((v) => v + 1);
@@ -45,6 +61,7 @@ export default function SetDetailPage() {
           setState("missing");
         } else if (s.data && c.data) {
           setStudySet(s.data);
+          setDocumentStatus(s.data.document?.status ?? null);
           setCards(c.data);
           setState("ready");
         } else {
@@ -61,6 +78,22 @@ export default function SetDetailPage() {
       cancelled = true;
     };
   }, [setId, version]);
+
+  function onMapChanged() {
+    reload();
+    knowledgeMap.refresh();
+  }
+
+  function selectTab(value: string) {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", value);
+        return next;
+      },
+      { replace: true },
+    );
+  }
 
   async function saveSet(values: {
     title: string;
@@ -188,54 +221,80 @@ export default function SetDetailPage() {
         <DocumentStatus
           key={studySet.document.id}
           document={studySet.document}
+          onStatusChange={setDocumentStatus}
         />
       )}
 
-      <section className="grid gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Cards</h2>
-          <Button onClick={() => setCardDialog({ mode: "add" })}>
-            Add card
-          </Button>
-        </div>
-        {cards.length === 0 && (
-          <p className="text-muted-foreground">No cards yet.</p>
-        )}
-        <ul className="grid gap-3">
-          {cards.map((c) => (
-            <li key={c.id}>
-              <Card>
-                <CardContent className="grid gap-3">
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <p className="whitespace-pre-wrap">{c.front}</p>
-                    <p className="whitespace-pre-wrap text-muted-foreground">
-                      {c.back}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      aria-label="Edit card"
-                      onClick={() => setCardDialog({ mode: "edit", card: c })}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      aria-label="Delete card"
-                      onClick={() => setDeletingCard(c)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <Tabs value={tab} onValueChange={selectTab}>
+        <TabsList>
+          <TabsTrigger value="cards">Cards</TabsTrigger>
+          <TabsTrigger value="map">Knowledge Map</TabsTrigger>
+          <TabsTrigger value="suggested">
+            {`Suggested (${studySet.suggested_count})`}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="cards" className="grid gap-3">
+          <div className="flex items-center justify-end">
+            <Button onClick={() => setCardDialog({ mode: "add" })}>
+              Add card
+            </Button>
+          </div>
+          {cards.length === 0 && (
+            <p className="text-muted-foreground">No cards yet.</p>
+          )}
+          <ul className="grid gap-3">
+            {cards.map((c) => (
+              <li key={c.id}>
+                <Card>
+                  <CardContent className="grid gap-3">
+                    {c.origin === "generated" && <AiBadge />}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <p className="whitespace-pre-wrap">{c.front}</p>
+                      <p className="whitespace-pre-wrap text-muted-foreground">
+                        {c.back}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-label="Edit card"
+                        onClick={() => setCardDialog({ mode: "edit", card: c })}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-label="Delete card"
+                        onClick={() => setDeletingCard(c)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </TabsContent>
+        <TabsContent value="map">
+          <KnowledgeMapTab
+            setId={setId}
+            map={knowledgeMap.map}
+            state={knowledgeMap.state}
+            timedOut={knowledgeMap.timedOut}
+            documentStatus={documentStatus}
+            onChanged={onMapChanged}
+            onReplace={knowledgeMap.replace}
+          />
+        </TabsContent>
+        <TabsContent value="suggested">
+          <p className="text-muted-foreground">
+            Suggested cards will appear here.
+          </p>
+        </TabsContent>
+      </Tabs>
 
       <SetFormDialog
         open={editingSet}
