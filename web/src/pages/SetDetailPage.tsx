@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { api, errorMessage } from "@/api/client";
@@ -10,6 +10,7 @@ import DocumentStatus from "@/components/DocumentStatus";
 import type { DocumentStatusValue } from "@/components/DocumentStatus";
 import KnowledgeMapTab from "@/components/KnowledgeMapTab";
 import SetFormDialog from "@/components/SetFormDialog";
+import SuggestedTab from "@/components/SuggestedTab";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,7 +30,9 @@ export default function SetDetailPage() {
   const { setId = "" } = useParams();
   const navigate = useNavigate();
   const [studySet, setStudySet] = useState<StudySet | null>(null);
+  // Accepted cards only: suggested ones never reach the Cards tab or Review.
   const [cards, setCards] = useState<Flashcard[]>([]);
+  const [suggested, setSuggested] = useState<Flashcard[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "missing" | "error">(
     "loading",
   );
@@ -54,18 +57,22 @@ export default function SetDetailPage() {
     Promise.all([
       api.GET("/study-sets/{set_id}", { params: { path } }),
       api.GET("/study-sets/{set_id}/flashcards", { params: { path } }),
+      api.GET("/study-sets/{set_id}/flashcards", {
+        params: { path, query: { status: "suggested" } },
+      }),
     ])
-      .then(([s, c]) => {
+      .then(([s, c, g]) => {
         if (cancelled) return;
         if (s.response.status === 404) {
           setState("missing");
-        } else if (s.data && c.data) {
+        } else if (s.data && c.data && g.data) {
           setStudySet(s.data);
           setDocumentStatus(s.data.document?.status ?? null);
           setCards(c.data);
+          setSuggested(g.data);
           setState("ready");
         } else {
-          setLoadError(errorMessage(s.error ?? c.error));
+          setLoadError(errorMessage(s.error ?? c.error ?? g.error));
           setState("error");
         }
       })
@@ -78,6 +85,22 @@ export default function SetDetailPage() {
       cancelled = true;
     };
   }, [setId, version]);
+
+  // A card run that just finished (or failed) changed the lists and the
+  // suggested count: reload them.
+  const cardsStatus = knowledgeMap.map?.cards_status ?? null;
+  const prevCardsStatus = useRef(cardsStatus);
+  useEffect(() => {
+    const prev = prevCardsStatus.current;
+    prevCardsStatus.current = cardsStatus;
+    if (
+      prev === "processing" &&
+      cardsStatus !== null &&
+      cardsStatus !== "processing"
+    ) {
+      setVersion((v) => v + 1);
+    }
+  }, [cardsStatus]);
 
   function onMapChanged() {
     reload();
@@ -290,9 +313,12 @@ export default function SetDetailPage() {
           />
         </TabsContent>
         <TabsContent value="suggested">
-          <p className="text-muted-foreground">
-            Suggested cards will appear here.
-          </p>
+          <SuggestedTab
+            setId={setId}
+            cards={suggested}
+            concepts={knowledgeMap.map?.concepts ?? []}
+            onChanged={reload}
+          />
         </TabsContent>
       </Tabs>
 

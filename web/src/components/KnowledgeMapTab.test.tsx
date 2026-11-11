@@ -410,6 +410,9 @@ describe("KnowledgeMapTab", () => {
       "Delete Respiration",
       "Reorder Cell division",
       "Reorder Respiration",
+      "Generate flashcards",
+      "Regenerate cards for Cell division",
+      "Regenerate cards for Respiration",
     ]) {
       expect(screen.getByRole("button", { name })).toBeDisabled();
     }
@@ -432,6 +435,14 @@ describe("KnowledgeMapTab", () => {
     ).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Delete Cell division" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Generate flashcards" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", {
+        name: "Regenerate cards for Cell division",
+      }),
     ).toBeDisabled();
     const handle = screen.getByRole("button", {
       name: "Reorder Cell division",
@@ -461,6 +472,9 @@ describe("KnowledgeMapTab", () => {
     const rebuild = screen.getByRole("button", { name: "Rebuild" });
     expect(rebuild).toBeEnabled();
     expect(screen.getByRole("button", { name: "Add concept" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Generate flashcards" }),
+    ).toBeDisabled();
     await user.click(rebuild);
     await user.click(
       within(screen.getByRole("alertdialog")).getByRole("button", {
@@ -473,6 +487,81 @@ describe("KnowledgeMapTab", () => {
     expect(
       await screen.findByText("Building the Knowledge Map…"),
     ).toBeInTheDocument();
+  });
+
+  describe("generate", () => {
+    const LIST = "GET /study-sets/s1/flashcards";
+    const GENERATE = "POST /study-sets/s1/flashcards/generate";
+    const emptyLists = (req: Request) => {
+      const status = new URL(req.url).searchParams.get("status");
+      if (status === "accepted" || status === "suggested") return json([], 200);
+      throw new Error(`unexpected status query: ${status}`);
+    };
+
+    it("Generate flashcards is enabled on a ready map with concepts", async () => {
+      stubFetch({ [KM]: () => json(mapOut(), 200) });
+      render(<Harness documentStatus="ready" />);
+      expect(
+        await screen.findByRole("button", { name: "Generate flashcards" }),
+      ).toBeEnabled();
+      expect(
+        screen.getByRole("button", {
+          name: "Regenerate cards for Respiration",
+        }),
+      ).toBeEnabled();
+    });
+
+    it("Generate flashcards is disabled when the map has no concepts", async () => {
+      stubFetch({ [KM]: () => json(mapOut({ concepts: [] }), 200) });
+      render(<Harness documentStatus="ready" />);
+      expect(
+        await screen.findByRole("button", { name: "Generate flashcards" }),
+      ).toBeDisabled();
+    });
+
+    it("Regenerate cards on a row posts that concept and shows the status", async () => {
+      const user = userEvent.setup();
+      const m = stubFetch({
+        [KM]: () => json(mapOut(), 200),
+        [LIST]: emptyLists,
+        [GENERATE]: () => json(mapOut({ cards_status: "processing" }), 202),
+      });
+      render(<Harness documentStatus="ready" />);
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Regenerate cards for Respiration",
+        }),
+      );
+      expect(
+        await screen.findByText("Generating flashcards…"),
+      ).toBeInTheDocument();
+      expect(await requests(m, "POST")).toEqual([
+        {
+          path: "/study-sets/s1/flashcards/generate",
+          body: JSON.stringify({ concept_id: "c2" }),
+        },
+      ]);
+      expect(screen.getByRole("button", { name: "Rebuild" })).toBeDisabled();
+    });
+
+    it("a 429 on Generate flashcards shows the toast", async () => {
+      const user = userEvent.setup();
+      stubFetch({
+        [KM]: () => json(mapOut(), 200),
+        [LIST]: emptyLists,
+        [GENERATE]: () => json(apiError("rate_limited", "Slow down."), 429),
+      });
+      render(<Harness documentStatus="ready" />);
+      await user.click(
+        await screen.findByRole("button", { name: "Generate flashcards" }),
+      );
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith("Slow down."),
+      );
+      expect(
+        screen.getByRole("button", { name: "Generate flashcards" }),
+      ).toBeEnabled();
+    });
   });
 
   describe("no map", () => {

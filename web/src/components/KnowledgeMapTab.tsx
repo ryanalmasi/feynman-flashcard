@@ -18,13 +18,14 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { toast } from "sonner";
-import { api, errorMessage } from "@/api/client";
+import { api, errorMessage, validationMessage } from "@/api/client";
 import type { components } from "@/api/schema.gen";
 import ConceptFormDialog from "@/components/ConceptFormDialog";
 import type { ConceptValues } from "@/components/ConceptFormDialog";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { TIMEOUT_COPY } from "@/components/DocumentStatus";
 import type { DocumentStatusValue } from "@/components/DocumentStatus";
+import GenerateCardsButton from "@/components/GenerateCardsButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,17 +62,6 @@ const IMPORTANCE_VARIANT = {
   supporting: "secondary",
   detail: "outline",
 } as const;
-
-/** A 422's first detail message when present, else the error's message. */
-function validationMessage(error: unknown): string {
-  const details = (error as { error?: { details?: unknown } } | null)?.error
-    ?.details;
-  if (Array.isArray(details)) {
-    const msg = (details[0] as { msg?: unknown } | undefined)?.msg;
-    if (typeof msg === "string" && msg) return msg;
-  }
-  return errorMessage(error);
-}
 
 function NoMap({
   documentStatus,
@@ -123,13 +113,16 @@ function NoMap({
 }
 
 function ConceptRow({
+  setId,
   concept,
   index,
   disabled,
   sortDisabled,
   onEdit,
   onDelete,
+  onStarted,
 }: {
+  setId: string;
   concept: Concept;
   index: number;
   /** Locks the row's controls, the drag handle included. */
@@ -138,6 +131,7 @@ function ConceptRow({
   sortDisabled: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onStarted: (m: KnowledgeMapOut) => void;
 }) {
   const {
     attributes,
@@ -238,6 +232,13 @@ function ConceptRow({
             >
               Delete
             </Button>
+            <GenerateCardsButton
+              setId={setId}
+              conceptId={concept.id}
+              conceptTitle={concept.title}
+              disabled={disabled}
+              onStarted={onStarted}
+            />
           </div>
         </CardContent>
       </Card>
@@ -417,6 +418,12 @@ export default function KnowledgeMapTab({
           {`AI-generated from ${map.source_filename} · ${n} ${n === 1 ? "concept" : "concepts"}`}
         </p>
         <div className="flex flex-wrap gap-2">
+          <GenerateCardsButton
+            setId={setId}
+            conceptId={null}
+            disabled={!editable || n === 0}
+            onStarted={onReplace}
+          />
           <Button
             variant="outline"
             disabled={!editable}
@@ -480,12 +487,14 @@ export default function KnowledgeMapTab({
             {concepts.map((c, i) => (
               <ConceptRow
                 key={c.id}
+                setId={setId}
                 concept={c}
                 index={i}
                 disabled={!editable}
                 sortDisabled={!editable || saving}
                 onEdit={() => setConceptDialog({ mode: "edit", concept: c })}
                 onDelete={() => setDeleting(c)}
+                onStarted={onReplace}
               />
             ))}
           </ul>
