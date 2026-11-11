@@ -10,9 +10,10 @@ from feynman_api.auth.dependencies import CurrentUser, current_user
 from feynman_api.auth.ownership import get_owned_set
 from feynman_api.db import get_session
 from feynman_api.errors import ErrorResponse
-from feynman_api.models import Document, Flashcard, StudySet
+from feynman_api.models import Document, Flashcard, KnowledgeMap, StudySet
 from feynman_api.routes.schemas import (
     DocumentSummary,
+    KnowledgeMapSummary,
     StudySetCreate,
     StudySetOut,
     StudySetUpdate,
@@ -33,29 +34,43 @@ _ERRORS: dict[int | str, dict[str, Any]] = {
 async def _outs(
     db: AsyncSession, user_id: uuid.UUID, set_id: uuid.UUID | None
 ) -> list[StudySetOut]:
-    """Owner-scoped sets with card_count and document in ONE query (no N+1)."""
+    """Owner-scoped sets with both card counts, the document and the map summary in ONE query
+    (no N+1). card_count counts accepted cards only; suggested cards are the draft tray."""
     counts = (
-        select(Flashcard.study_set_id, func.count().label("n"))
+        select(
+            Flashcard.study_set_id,
+            func.count().filter(Flashcard.status == "accepted").label("accepted"),
+            func.count().filter(Flashcard.status == "suggested").label("suggested"),
+        )
         .group_by(Flashcard.study_set_id)
         .subquery()
     )
     stmt = (
-        select(StudySet, func.coalesce(counts.c.n, 0), Document)
+        select(
+            StudySet,
+            func.coalesce(counts.c.accepted, 0),
+            func.coalesce(counts.c.suggested, 0),
+            Document,
+            KnowledgeMap.status,
+            KnowledgeMap.cards_status,
+        )
         .outerjoin(counts, counts.c.study_set_id == StudySet.id)
         .outerjoin(Document, Document.study_set_id == StudySet.id)
+        .outerjoin(KnowledgeMap, KnowledgeMap.study_set_id == StudySet.id)
         .where(StudySet.user_id == user_id)
         .order_by(StudySet.created_at.desc(), StudySet.id.desc())
     )
     if set_id is not None:
         stmt = stmt.where(StudySet.id == set_id)
     result: list[StudySetOut] = []
-    for s, n, doc in (await db.execute(stmt)).all():
+    for s, accepted, suggested, doc, map_status, cards_status in (await db.execute(stmt)).all():
         result.append(
             StudySetOut(
                 id=s.id,
                 title=s.title,
                 description=s.description,
-                card_count=n,
+                card_count=accepted,
+                suggested_count=suggested,
                 document=(
                     DocumentSummary(
                         id=doc.id,
@@ -65,6 +80,11 @@ async def _outs(
                         error_message=doc.error_message,
                     )
                     if doc is not None
+                    else None
+                ),
+                knowledge_map=(
+                    KnowledgeMapSummary(status=map_status, cards_status=cards_status)
+                    if map_status is not None
                     else None
                 ),
                 created_at=s.created_at,

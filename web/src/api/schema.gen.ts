@@ -248,6 +248,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/study-sets/{set_id}/flashcards/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate Flashcards */
+        post: operations["generate_flashcards_study_sets__set_id__flashcards_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/study-sets/{set_id}/knowledge-map": {
         parameters: {
             query?: never;
@@ -299,16 +316,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/study-sets/{set_id}/suggested-cards/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept Suggested Cards */
+        post: operations["accept_suggested_cards_study_sets__set_id__suggested_cards_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/study-sets/{set_id}/suggested-cards/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Suggested Cards */
+        post: operations["reject_suggested_cards_study_sets__set_id__suggested_cards_reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptOut */
+        AcceptOut: {
+            /** Accepted */
+            accepted: number;
+        };
         /** Body_upload_document_documents_post */
         Body_upload_document_documents_post: {
             /** File */
             file: string;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * CardIdsRequest
+         * @description null (or omitted) means every suggested card of the set.
+         */
+        CardIdsRequest: {
+            /** Card Ids */
+            card_ids?: string[] | null;
         };
         /** ConceptCreate */
         ConceptCreate: {
@@ -450,20 +514,33 @@ export interface components {
         };
         /** FlashcardCreate */
         FlashcardCreate: {
-            /** Back */
+            /**
+             * Back
+             * @default
+             */
             back: string;
             /** Front */
             front: string;
+            /**
+             * Kind
+             * @default qa
+             * @enum {string}
+             */
+            kind: "qa" | "cloze";
         };
         /** FlashcardOut */
         FlashcardOut: {
             /** Back */
             back: string;
+            /** Concept Id */
+            concept_id: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Edited */
+            edited: boolean;
             /** Front */
             front: string;
             /**
@@ -472,10 +549,20 @@ export interface components {
              */
             id: string;
             /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "qa" | "cloze";
+            /**
              * Origin
              * @enum {string}
              */
             origin: "manual" | "generated";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "suggested" | "accepted";
             /**
              * Study Set Id
              * Format: uuid
@@ -487,12 +574,25 @@ export interface components {
              */
             updated_at: string;
         };
-        /** FlashcardUpdate */
+        /**
+         * FlashcardUpdate
+         * @description An omitted field is unchanged; an explicit null is a 422. The route validates the
+         *     merged row (stored values plus this patch) with `card_rule_error`.
+         */
         FlashcardUpdate: {
             /** Back */
             back?: string | null;
             /** Front */
             front?: string | null;
+            /** Kind */
+            kind?: ("qa" | "cloze") | null;
+            /** Status */
+            status?: "accepted" | null;
+        };
+        /** GenerateCardsRequest */
+        GenerateCardsRequest: {
+            /** Concept Id */
+            concept_id?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -554,6 +654,19 @@ export interface components {
              */
             status: "processing" | "ready" | "failed";
         };
+        /** KnowledgeMapSummary */
+        KnowledgeMapSummary: {
+            /**
+             * Cards Status
+             * @enum {string}
+             */
+            cards_status: "idle" | "processing" | "failed";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "processing" | "ready" | "failed";
+        };
         /** LoginIn */
         LoginIn: {
             /**
@@ -577,6 +690,11 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /** RejectOut */
+        RejectOut: {
+            /** Rejected */
+            rejected: number;
         };
         /** SessionOut */
         SessionOut: {
@@ -608,6 +726,9 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            knowledge_map: components["schemas"]["KnowledgeMapSummary"] | null;
+            /** Suggested Count */
+            suggested_count: number;
             /** Title */
             title: string;
             /**
@@ -1551,7 +1672,9 @@ export interface operations {
     };
     list_flashcards_study_sets__set_id__flashcards_get: {
         parameters: {
-            query?: never;
+            query?: {
+                status?: "accepted" | "suggested";
+            };
             header?: never;
             path: {
                 set_id: string;
@@ -1647,6 +1770,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_flashcards_study_sets__set_id__flashcards_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateCardsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeMapOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -1825,6 +2019,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    accept_suggested_cards_study_sets__set_id__suggested_cards_accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardIdsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_suggested_cards_study_sets__set_id__suggested_cards_reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardIdsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RejectOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

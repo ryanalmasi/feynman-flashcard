@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from feynman_api.models import Document, DocumentPage
+from feynman_api.models import Document, DocumentPage, Flashcard, KnowledgeMap
 from feynman_api.storage import LocalFileStore, new_storage_key
 
 pytestmark = pytest.mark.usefixtures("clean_db")
@@ -196,3 +196,77 @@ async def test_nul_character_rejected_with_422(user_client: httpx.AsyncClient) -
     for body in ({"front": "a\x00", "back": "b"}, {"front": "a", "back": "b\x00"}):
         r = await user_client.post(f"/study-sets/{sid}/flashcards", json=body, headers=h)
         assert r.status_code == 422
+
+
+async def _seed_map(db: AsyncSession, set_id: str, *, cards_status: str = "idle") -> None:
+    doc = Document(
+        study_set_id=uuid.UUID(set_id),
+        storage_key=uuid.uuid4().hex,
+        original_filename="lesson.pdf",
+        size_bytes=1,
+        status="ready",
+        page_count=1,
+    )
+    db.add(doc)
+    await db.flush()
+    db.add(
+        KnowledgeMap(
+            study_set_id=uuid.UUID(set_id),
+            document_id=doc.id,
+            status="ready",
+            cards_status=cards_status,
+        )
+    )
+    await db.commit()
+
+
+async def test_card_count_counts_only_accepted(
+    user_client: httpx.AsyncClient, db: AsyncSession
+) -> None:
+    h = await auth_headers(user_client)
+    s = await _make_set(user_client)
+    empty = await _make_set(user_client, "Empty")
+    assert s["card_count"] == 0 and s["suggested_count"] == 0
+    await user_client.post(
+        f"/study-sets/{s['id']}/flashcards", json={"front": "f", "back": "b"}, headers=h
+    )
+    db.add(
+        Flashcard(
+            study_set_id=uuid.UUID(s["id"]),
+            front="g",
+            back="b",
+            origin="generated",
+            status="accepted",
+        )
+    )
+    for i in range(3):
+        db.add(
+            Flashcard(
+                study_set_id=uuid.UUID(s["id"]),
+                front=f"s{i}",
+                back="b",
+                origin="generated",
+                status="suggested",
+            )
+        )
+    await db.commit()
+    got = (await user_client.get(f"/study-sets/{s['id']}")).json()
+    assert got["card_count"] == 2 and got["suggested_count"] == 3
+    listed = {x["id"]: x for x in (await user_client.get("/study-sets")).json()}
+    assert (listed[s["id"]]["card_count"], listed[s["id"]]["suggested_count"]) == (2, 3)
+    assert (listed[empty["id"]]["card_count"], listed[empty["id"]]["suggested_count"]) == (0, 0)
+
+
+async def test_set_out_has_map_summary(user_client: httpx.AsyncClient, db: AsyncSession) -> None:
+    plain = await _make_set(user_client, "Plain")
+    assert plain["knowledge_map"] is None
+    mapped = await _make_set(user_client, "Mapped")
+    await _seed_map(db, mapped["id"], cards_status="processing")
+    got = (await user_client.get(f"/study-sets/{mapped['id']}")).json()
+    assert got["knowledge_map"] == {"status": "ready", "cards_status": "processing"}
+    listed = {x["id"]: x for x in (await user_client.get("/study-sets")).json()}
+    assert listed[plain["id"]]["knowledge_map"] is None
+    assert listed[mapped["id"]]["knowledge_map"] == {
+        "status": "ready",
+        "cards_status": "processing",
+    }

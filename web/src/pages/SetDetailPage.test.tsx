@@ -67,7 +67,7 @@ describe("SetDetailPage", () => {
     await waitFor(async () => expect(await bodies(m, "POST")).toHaveLength(1));
     expect((await bodies(m, "POST"))[0]).toEqual({
       path: "/study-sets/s1/flashcards",
-      body: JSON.stringify({ front: "Q2", back: "A2" }),
+      body: JSON.stringify({ kind: "qa", front: "Q2", back: "A2" }),
     });
 
     await user.click(screen.getByRole("button", { name: "Edit card" }));

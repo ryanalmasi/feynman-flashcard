@@ -90,7 +90,7 @@ export default function SetDetailPage() {
         dialog.mode === "add"
           ? await api.POST("/study-sets/{set_id}/flashcards", {
               params: { path: { set_id: setId } },
-              body: values,
+              body: { kind: "qa", ...values },
             })
           : await api.PATCH("/flashcards/{card_id}", {
               params: { path: { card_id: dialog.card.id } },
