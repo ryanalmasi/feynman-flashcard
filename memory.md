@@ -4,7 +4,7 @@
 > **Rule:** update this file **first** during any handoff. The handoff prompt (`handoff-prompts/orchestrator/orchestrator-handoff-N.md`) is written **last**, after this file and the docs are current. See "Handoffs" in `CLAUDE.md`.
 > **Not the same as** Claude Code's private auto-memory (`~/.claude/projects/.../memory/MEMORY.md`). That one is outside the repo. This file is versioned with the project and is the source of truth for project state.
 
-**Last updated:** 2026-11-11 (session 7: **2b plan and implementer kickoff approved by the owner**; G11 answered (Rebuild creates a missing map); docs commit as Task 0 of the 2b branch. Nothing committed; next: the owner starts the implementer)
+**Last updated:** 2026-11-11 (Phase 2b implementer run IN PROGRESS, Tasks 0-14 done, see "Implementation run: Phase 2b"; earlier: session 7: **2b plan and implementer kickoff approved by the owner**; G11 answered (Rebuild creates a missing map); docs commit as Task 0 of the 2b branch. Nothing committed; next: the owner starts the implementer)
 **Latest handoff written:** #6 (`handoff-prompts/orchestrator/orchestrator-handoff-6.md`), plus implementer kickoffs `implementer-phase-1.md`, `implementer-phase-1-fixups.md`, `implementer-phase-2a.md`, `implementer-phase-2a-fixups.md`, `implementer-phase-2a-resume-1.md`, and **`implementer-phase-2b.md` (new, not yet approved)**
 
 ---
@@ -396,9 +396,37 @@ Model: Opus 5.5 (orchestrator). No code written, nothing committed.
 - **Owner question (handoff #5):** commit the docs on `main`, or as Task 0 of `phase-2b-ai-content`? The plan assumes Task 0, as in 2a.
 - The plan was not re-checked by a second builder pass after the fixes (they were targeted edits).
 
+### Implementation run: Phase 2b (2026-11-11, IN PROGRESS: Tasks 0-14 done, 15 and 16 left)
+
+Run by an implementer session using superpowers:subagent-driven-development (fresh subagent per task + a task reviewer; fix rounds resumed the implementer). Branch `phase-2b-ai-content`, pushed after every task. Baseline 238 pytest / 99 vitest; now **470 pytest (1 skipped: the live LLM test) / 200 vitest**. gitleaks clean at every push.
+
+**Commits per task:** T0 `e784fb6` (docs) · T1 `d8e6592` · T2 `24a9880` + fix `8948b07` · T3 `71fd8db` · T4 `5f175ca` + fix `77277ce` · T5 `6771955` · T6 `58d5082` + fix `2e4a1a1` · T7 `9e88337` + fix `765c5a8` · T8 `1cd5e01` · T9 `bca0ed1` + fix `f8b7ecc` · T10 `7d72ff5` · T11 `dd57146` · T12 `daa5472` + fix `ab8e3c6` · T13 `d3cfa5b` · T14 `7da5b1b`.
+
+**Where to resume:** Task 15 (cloze editor, cloze rendering, review flip accessibility), then Task 16 (CI proof with `gh run watch`, the owner's manual browser check, docs, draft PR), then the whole-branch final review (most capable model).
+The SDD ledger with every finding, ruling and deferred minor is at `.superpowers/sdd/implementation-plan-phase-2b/progress.md` (gitignored; briefs/reports/review diffs are in the same folder). If it is gone, rebuild from `git log` and this entry.
+
+**Task 2 SDK confirmations (from its report):** `anthropic` 2.8.0 depends on `httpx2` (so `httpx2.MockTransport` is correct and `httpx2` is dev-only); `anthropic.DefaultAsyncHttpxClient(transport=MockTransport)` works; `output_config.effort` accepted for `claude-sonnet-5-5` and `claude-haiku-5-5`; API version `2026-10-21`; no sampling params added by the SDK; exception names exist. Full detail in the Task 2 commit body (`24a9880`).
+
+**Deviations / rulings for the PR body:**
+- T2: structured output goes through `messages.create`/`messages.stream` with `output_config.format` (`anthropic.transform_schema`) and our own validation, not `messages.parse` (parse validates before `stop_reason` is visible, which would break the required refusal → max_tokens → validation order). Request body identical. Also: mid-stream errors are classified by their `.type`.
+- T4/T5: implementers wrote some implementation before tests; test strength was then mutation-checked and strengthened in review.
+- T4: merge system prompt's injection guard also names `<concepts>` (the merge listing carries paraphrased PDF text).
+- T6: `_main` pins the `anthropic`/`httpx2`/`httpcore2` loggers to WARNING+ **after** the provider is built (the SDK re-sets its log level on import when `ANTHROPIC_LOG` is set; DEBUG would log PDF text).
+- T7: plan premise wrong: the no-op `build_knowledge_map` handler does NOT keep `test_reprocessing_replaces_pages` exercising extraction (the second `run_once` claims the earlier build job). That one existing test was changed (extra `run_once`).
+- T8: plan Review Focus #2 typo ("retry sends only chunk 2"); the failing chunk is chunk 1, so the retry sends chunk 1 only.
+- T9: a concurrent map create returned 500 (unique violation at flush); fixed to 409 `MAP_PROCESSING` via `_flush`. Pin #10 (`hit(commit=False)` before the 409 checks) is not mutation-observable because nothing commits; the test catches a committing `hit`.
+- T10: web `SetDetailPage.tsx` (+ test) touched: regenerated types make `kind` required on add-card, so it sends `kind: "qa"`. Builder copy: "Q/A cards need an answer on the back."
+- T12: shadcn `tabs` CLI added an unapproved package `cn`; removed, `tabs.tsx` imports `@/lib/utils`. Hook fixed for setId changes mid-request.
+- T13: **`@dnd-kit/accessibility` 3.1.1 is in the lockfile** as a hard dependency of the approved `@dnd-kit/core` (cannot be removed). Accepted by the controller; **the owner should confirm** (kickoff says any other package needs the owner). Versions pinned with `~`.
+- T14: builder copy: dialog title "Replace AI-generated cards?", group heading "Other", row button name "Regenerate cards for X".
+
+**Open owner questions (copy conflicts):** (1) Sets-page hint: plan says "Map: building", design §7.8 says "Map: processing"; code uses the plan's wording (one string). (2) The regenerate dialog is skipped when nothing would be replaced (brief), the design reads as if per-concept regenerate always confirms. (3) The quoted sentence gives "1 AI-generated cards" for N=1 (exact copy kept).
+
+**Deferred minors (for the final review to triage)** are listed per task in the ledger. Notable: T2 dev-env.sh append can blank a hand-set key when `LLM_ENABLED=` is missing; T7 an `extract_pdf` re-run while a map is processing would delete chunks and enqueue a second build (unreachable today); T8 chunk rows matched by index only; T11 cap-150 test seeds only edited cards (count-after-delete not pinned); T13 Edit/Delete/Add are not disabled during a reorder save and keyboard focus retention after reorder is only checkable in a browser (include it in the owner's manual check); T14 second click on an actioned suggested card can toast a 404 before the reload.
+
 ## 3. Repository state
 
-- **Path:** `~/code/feynman-flashcard`. **Branch checked out:** `main` at `1a584b6` (Phase 2a squash merge), in sync with `origin/main`; CI green (run 42583469134). `phase-2a-foundations` is merged and can be deleted by the owner.
+- **Path:** `~/code/feynman-flashcard`. **2b run: branch `phase-2b-ai-content` is checked out and pushed at `7da5b1b` (Tasks 0-14); no PR yet.** (Older note: `main` at `1a584b6` (Phase 2a squash merge), in sync with `origin/main`; CI green (run 42583469134). `phase-2a-foundations` is merged and can be deleted by the owner.)
 - **PRs:** #1 (Phase 1) and #2 (Phase 2a) merged. No open PRs.
 - **Uncommitted (session 5):**
   - `docs/adr/0019-llm-provider-anthropic.md`, `0020-knowledge-map.md`, `0021-generated-flashcards.md` (new)
