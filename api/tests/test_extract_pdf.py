@@ -240,11 +240,18 @@ async def test_unexpected_error_exhausts_to_generic(  # type: ignore[no-untyped-
 
 
 def test_extraction_not_imported_by_api() -> None:
-    code = "import sys, feynman_api.main; sys.exit(1 if 'pypdfium2' in sys.modules else 0)"
+    # The API process imports neither the PDF library nor any job handler.
+    code = (
+        "import sys, feynman_api.main\n"
+        "bad = [m for m in sys.modules if m == 'pypdfium2' or m.startswith('pypdfium2.')\n"
+        "       or m.startswith('feynman_api.jobs.handlers')]\n"
+        "print(bad)\n"
+        "sys.exit(1 if bad else 0)"
+    )
     result = subprocess.run(  # noqa: S603
         [sys.executable, "-c", code], capture_output=True, text=True
     )
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 class _FakeTextPage:
