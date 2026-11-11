@@ -278,6 +278,7 @@ describe("SuggestedTab", () => {
         method: "PATCH",
         path: "/flashcards/c1",
         body: JSON.stringify({
+          kind: "qa",
           front: "New front",
           back: "Back of Cells card",
         }),

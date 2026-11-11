@@ -127,6 +127,7 @@ describe("SetDetailPage", () => {
     await waitFor(async () => expect(await bodies(m, "PATCH")).toHaveLength(1));
     expect((await bodies(m, "PATCH"))[0].path).toBe("/flashcards/c1");
     expect(JSON.parse((await bodies(m, "PATCH"))[0].body)).toEqual({
+      kind: "qa",
       front: "Q1b",
       back: "A1",
     });

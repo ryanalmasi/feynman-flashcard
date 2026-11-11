@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { api, errorMessage, validationMessage } from "@/api/client";
 import type { components } from "@/api/schema.gen";
 import AiBadge from "@/components/AiBadge";
+import ClozeText from "@/components/ClozeText";
 import CardFormDialog from "@/components/CardFormDialog";
 import type { CardValues } from "@/components/CardFormDialog";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -154,7 +155,13 @@ export default function SuggestedTab({
                   <CardContent className="grid gap-3">
                     {c.origin === "generated" && <AiBadge />}
                     <div className="grid gap-2 sm:grid-cols-2">
-                      <p className="whitespace-pre-wrap">{c.front}</p>
+                      <p className="whitespace-pre-wrap">
+                        {c.kind === "cloze" ? (
+                          <ClozeText front={c.front} reveal />
+                        ) : (
+                          c.front
+                        )}
+                      </p>
                       <p className="whitespace-pre-wrap text-muted-foreground">
                         {c.back}
                       </p>
@@ -200,7 +207,13 @@ export default function SuggestedTab({
         heading="Edit card"
         submitLabel="Save"
         initial={
-          editing ? { front: editing.front, back: editing.back } : undefined
+          editing
+            ? {
+                kind: editing.kind,
+                front: editing.front,
+                back: editing.back,
+              }
+            : undefined
         }
         onSubmit={saveEdit}
       />

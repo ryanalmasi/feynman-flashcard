@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { api, errorMessage } from "@/api/client";
+import { api, errorMessage, validationMessage } from "@/api/client";
 import type { components } from "@/api/schema.gen";
 import AiBadge from "@/components/AiBadge";
 import CardFormDialog from "@/components/CardFormDialog";
+import type { CardValues } from "@/components/CardFormDialog";
+import ClozeText from "@/components/ClozeText";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import DocumentStatus from "@/components/DocumentStatus";
 import type { DocumentStatusValue } from "@/components/DocumentStatus";
@@ -135,10 +137,7 @@ export default function SetDetailPage() {
     }
   }
 
-  async function saveCard(values: {
-    front: string;
-    back: string;
-  }): Promise<string | null> {
+  async function saveCard(values: CardValues): Promise<string | null> {
     const dialog = cardDialog;
     if (!dialog) return null;
     try {
@@ -146,13 +145,17 @@ export default function SetDetailPage() {
         dialog.mode === "add"
           ? await api.POST("/study-sets/{set_id}/flashcards", {
               params: { path: { set_id: setId } },
-              body: { kind: "qa", ...values },
+              body: values,
             })
           : await api.PATCH("/flashcards/{card_id}", {
               params: { path: { card_id: dialog.card.id } },
               body: values,
             });
-      if (!res.data) return errorMessage(res.error);
+      if (!res.data) {
+        return res.response.status === 422
+          ? validationMessage(res.error)
+          : errorMessage(res.error);
+      }
       reload();
       return null;
     } catch {
@@ -272,7 +275,13 @@ export default function SetDetailPage() {
                   <CardContent className="grid gap-3">
                     {c.origin === "generated" && <AiBadge />}
                     <div className="grid gap-2 sm:grid-cols-2">
-                      <p className="whitespace-pre-wrap">{c.front}</p>
+                      <p className="whitespace-pre-wrap">
+                        {c.kind === "cloze" ? (
+                          <ClozeText front={c.front} reveal />
+                        ) : (
+                          c.front
+                        )}
+                      </p>
                       <p className="whitespace-pre-wrap text-muted-foreground">
                         {c.back}
                       </p>
@@ -339,7 +348,11 @@ export default function SetDetailPage() {
         submitLabel={cardDialog?.mode === "edit" ? "Save" : "Add"}
         initial={
           cardDialog?.mode === "edit"
-            ? { front: cardDialog.card.front, back: cardDialog.card.back }
+            ? {
+                kind: cardDialog.card.kind,
+                front: cardDialog.card.front,
+                back: cardDialog.card.back,
+              }
             : undefined
         }
         onSubmit={saveCard}
