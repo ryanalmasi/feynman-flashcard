@@ -36,10 +36,14 @@ export function useKnowledgeMap(
     map: null,
     state: "loading",
   });
-  const [timedOut, setTimedOut] = useState(false);
+  // The set whose polling hit POLL_LIMIT_MS; a different set starts fresh.
+  const [timedOutFor, setTimedOutFor] = useState<string | null>(null);
+  const timedOut = timedOutFor === setId;
   const inFlight = useRef(false);
   const queued = useRef(false);
-  const mounted = useRef(true);
+  // Bumped when setId changes and on unmount. A request loop from an older
+  // epoch stops and never touches the current epoch's inFlight/queued flags.
+  const epoch = useRef(0);
   // Bumped by replace(): a response to a request sent before it is stale.
   const generation = useRef(0);
 
@@ -55,6 +59,8 @@ export function useKnowledgeMap(
         return;
       }
       inFlight.current = true;
+      const myEpoch = epoch.current;
+      const live = () => epoch.current === myEpoch;
       const failed = (l: Loaded): Loaded =>
         // A failed poll keeps what we have; only a failed first load is an error.
         l.setId === setId && l.state !== "loading"
@@ -70,29 +76,31 @@ export function useKnowledgeMap(
               "/study-sets/{set_id}/knowledge-map",
               { params: { path: { set_id: setId } } },
             );
-            if (!mounted.current || gen !== generation.current) continue;
+            if (!live() || gen !== generation.current) continue;
             if (data) setLoaded({ setId, map: data, state: "ready" });
             else if (response.status === 404)
               setLoaded({ setId, map: null, state: "none" });
             else setLoaded(failed);
           } catch {
-            if (mounted.current && gen === generation.current) {
+            if (live() && gen === generation.current) {
               setLoaded(failed);
             }
           }
-        } while (queued.current && mounted.current);
+        } while (live() && queued.current);
       } finally {
-        inFlight.current = false;
+        if (live()) inFlight.current = false;
       }
     },
     [setId],
   );
 
   useEffect(() => {
-    mounted.current = true;
     void load(true);
     return () => {
-      mounted.current = false;
+      // A new set (or unmount): abandon the old set's request and queue.
+      epoch.current += 1;
+      inFlight.current = false;
+      queued.current = false;
     };
   }, [load]);
 
@@ -118,24 +126,24 @@ export function useKnowledgeMap(
     }, POLL_MS);
     const limit = setTimeout(() => {
       clearInterval(interval);
-      if (active) setTimedOut(true);
+      if (active) setTimedOutFor(setId);
     }, POLL_LIMIT_MS);
     return () => {
       active = false;
       clearInterval(interval);
       clearTimeout(limit);
     };
-  }, [polling, load]);
+  }, [polling, load, setId]);
 
   const refresh = useCallback(() => {
-    setTimedOut(false);
+    setTimedOutFor(null);
     void load(true);
   }, [load]);
 
   const replace = useCallback(
     (m: KnowledgeMapOut) => {
       generation.current += 1;
-      setTimedOut(false);
+      setTimedOutFor(null);
       setLoaded({ setId, map: m, state: "ready" });
     },
     [setId],

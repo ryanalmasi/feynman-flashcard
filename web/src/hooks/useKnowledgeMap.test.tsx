@@ -267,6 +267,52 @@ describe("useKnowledgeMap", () => {
     expect(m).toHaveBeenCalledTimes(3);
   });
 
+  it("loads the new set's map when setId changes mid-request", async () => {
+    let releaseS1: (r: Response) => void = () => {};
+    const m = stubFetch({
+      [KM]: () => new Promise<Response>((r) => (releaseS1 = r)),
+      "GET /study-sets/s2/knowledge-map": () =>
+        json(mapOut({ id: "m2", source_filename: "two.pdf" }), 200),
+    });
+    const { result, rerender } = renderHook(
+      ({ id }) => useKnowledgeMap(id, false),
+      { initialProps: { id: "s1" } },
+    );
+    await settle(); // the s1 request is in flight
+    rerender({ id: "s2" });
+    await settle();
+    const paths = () =>
+      m.mock.calls.map((c) => new URL((c[0] as Request).url).pathname);
+    expect(paths()).toContain("/study-sets/s2/knowledge-map");
+    expect(result.current.state).toBe("ready");
+    expect(result.current.map?.source_filename).toBe("two.pdf");
+    // The late s1 response doesn't overwrite s2's map.
+    await act(async () => {
+      releaseS1(json(mapOut({ source_filename: "one.pdf" }), 200));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.map?.source_filename).toBe("two.pdf");
+    expect(paths().filter((p) => p.includes("/s1/"))).toHaveLength(1);
+  });
+
+  it("resets timedOut when setId changes", async () => {
+    stubFetch({
+      [KM]: () => json(mapOut({ status: "processing" }), 200),
+      "GET /study-sets/s2/knowledge-map": () =>
+        json(mapOut({ status: "processing" }), 200),
+    });
+    const { result, rerender } = renderHook(
+      ({ id }) => useKnowledgeMap(id, false),
+      { initialProps: { id: "s1" } },
+    );
+    await settle();
+    await act(() => vi.advanceTimersByTimeAsync(POLL_LIMIT_MS));
+    expect(result.current.timedOut).toBe(true);
+    rerender({ id: "s2" });
+    await settle();
+    expect(result.current.timedOut).toBe(false);
+  });
+
   it("clears its timers on unmount", async () => {
     const m = stubFetch({
       [KM]: () => json(mapOut({ status: "processing" }), 200),
